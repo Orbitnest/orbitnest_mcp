@@ -1,0 +1,213 @@
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { z } from 'zod';
+import type { ToolContext } from './index.js';
+import { formatErrorResponse } from '../utils/errors.js';
+import { requireProjectSlug } from '../utils/validators.js';
+
+export function registerStorageTools(server: McpServer, ctx: ToolContext): void {
+
+  // ─── List Buckets ───
+  server.registerTool('orbitnest_list_buckets', {
+    description: 'List all storage buckets for a project. Note: uses project slug, not ID.',
+    inputSchema: { projectSlug: z.string().optional() },
+  }, async ({ projectSlug }) => {
+    try {
+      await ctx.session.ensureAuthenticated();
+      const slug = requireProjectSlug(projectSlug, ctx.session.getSession().currentProjectSlug);
+      const result = await ctx.apiClient.listBuckets(slug);
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+      };
+    } catch (error) {
+      return formatErrorResponse(error);
+    }
+  });
+
+  // ─── Create Bucket ───
+  server.registerTool('orbitnest_create_bucket', {
+    description: 'Create a new storage bucket.',
+    inputSchema: {
+      projectSlug: z.string().optional(),
+      bucketName: z.string().min(1),
+      public: z.boolean().optional(),
+    },
+  }, async (args) => {
+    try {
+      await ctx.session.ensureAuthenticated();
+      const slug = requireProjectSlug(args.projectSlug, ctx.session.getSession().currentProjectSlug);
+      const result = await ctx.apiClient.createBucket(slug, args.bucketName, args.public);
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+      };
+    } catch (error) {
+      return formatErrorResponse(error);
+    }
+  });
+
+  // ─── Delete Bucket ───
+  server.registerTool('orbitnest_delete_bucket', {
+    description: 'Delete a storage bucket. Bucket must be empty. Requires confirmation.',
+    inputSchema: {
+      projectSlug: z.string().optional(),
+      bucketName: z.string(),
+      confirmDeletion: z.boolean(),
+    },
+  }, async ({ projectSlug, bucketName, confirmDeletion }) => {
+    try {
+      await ctx.session.ensureAuthenticated();
+      const slug = requireProjectSlug(projectSlug, ctx.session.getSession().currentProjectSlug);
+      if (!confirmDeletion) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({
+            error: 'Bucket deletion requires confirmDeletion=true.',
+          }, null, 2) }],
+        };
+      }
+      const result = await ctx.apiClient.deleteBucket(slug, bucketName);
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify({ success: true, data: result }, null, 2) }],
+      };
+    } catch (error) {
+      return formatErrorResponse(error);
+    }
+  });
+
+  // ─── List Files ───
+  server.registerTool('orbitnest_list_files', {
+    description: 'List files in a storage bucket with optional prefix filtering.',
+    inputSchema: {
+      projectSlug: z.string().optional(),
+      bucketName: z.string(),
+      prefix: z.string().optional(),
+      limit: z.number().optional(),
+    },
+  }, async ({ projectSlug, bucketName, prefix, limit }) => {
+    try {
+      await ctx.session.ensureAuthenticated();
+      const slug = requireProjectSlug(projectSlug, ctx.session.getSession().currentProjectSlug);
+      const result = await ctx.apiClient.listFiles(slug, bucketName, { prefix, limit });
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+      };
+    } catch (error) {
+      return formatErrorResponse(error);
+    }
+  });
+
+  // ─── Upload File ───
+  server.registerTool('orbitnest_upload_file', {
+    description: 'Upload a file to a storage bucket. File content is provided as a string (base64 for binary).',
+    inputSchema: {
+      projectSlug: z.string().optional(),
+      bucketName: z.string(),
+      filePath: z.string(),
+      fileContent: z.string(),
+      contentType: z.string().optional(),
+      upsert: z.boolean().optional(),
+    },
+  }, async ({ projectSlug, bucketName, filePath, fileContent, contentType, upsert }) => {
+    try {
+      await ctx.session.ensureAuthenticated();
+      const slug = requireProjectSlug(projectSlug, ctx.session.getSession().currentProjectSlug);
+      const result = await ctx.apiClient.uploadFile(slug, bucketName, {
+        filePath, fileContent, contentType, upsert,
+      });
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+      };
+    } catch (error) {
+      return formatErrorResponse(error);
+    }
+  });
+
+  // ─── Download File ───
+  server.registerTool('orbitnest_download_file', {
+    description: 'Download a file from a storage bucket.',
+    inputSchema: {
+      projectSlug: z.string().optional(),
+      bucketName: z.string(),
+      filePath: z.string(),
+    },
+  }, async ({ projectSlug, bucketName, filePath }) => {
+    try {
+      await ctx.session.ensureAuthenticated();
+      const slug = requireProjectSlug(projectSlug, ctx.session.getSession().currentProjectSlug);
+      const result = await ctx.apiClient.downloadFile(slug, bucketName, filePath);
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+      };
+    } catch (error) {
+      return formatErrorResponse(error);
+    }
+  });
+
+  // ─── Delete Files ───
+  server.registerTool('orbitnest_delete_files', {
+    description: 'Delete one or more files from a storage bucket. Requires confirmation.',
+    inputSchema: {
+      projectSlug: z.string().optional(),
+      bucketName: z.string(),
+      filePaths: z.array(z.string()),
+      confirmDeletion: z.boolean(),
+    },
+  }, async ({ projectSlug, bucketName, filePaths, confirmDeletion }) => {
+    try {
+      await ctx.session.ensureAuthenticated();
+      const slug = requireProjectSlug(projectSlug, ctx.session.getSession().currentProjectSlug);
+      if (!confirmDeletion) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({
+            error: 'File deletion requires confirmDeletion=true.',
+          }, null, 2) }],
+        };
+      }
+      const result = await ctx.apiClient.deleteFiles(slug, bucketName, filePaths);
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify({ success: true, data: result }, null, 2) }],
+      };
+    } catch (error) {
+      return formatErrorResponse(error);
+    }
+  });
+
+  // ─── Get Public URL ───
+  server.registerTool('orbitnest_get_public_url', {
+    description: 'Get the public URL for a file in a public bucket.',
+    inputSchema: {
+      projectSlug: z.string().optional(),
+      bucketName: z.string(),
+      filePath: z.string(),
+    },
+  }, async ({ projectSlug, bucketName, filePath }) => {
+    try {
+      await ctx.session.ensureAuthenticated();
+      const slug = requireProjectSlug(projectSlug, ctx.session.getSession().currentProjectSlug);
+      const result = await ctx.apiClient.getPublicUrl(slug, bucketName, filePath);
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+      };
+    } catch (error) {
+      return formatErrorResponse(error);
+    }
+  });
+
+  // ─── Get Bucket Size ───
+  server.registerTool('orbitnest_get_bucket_size', {
+    description: 'Get the total size of a storage bucket.',
+    inputSchema: {
+      projectSlug: z.string().optional(),
+      bucketName: z.string(),
+    },
+  }, async ({ projectSlug, bucketName }) => {
+    try {
+      await ctx.session.ensureAuthenticated();
+      const slug = requireProjectSlug(projectSlug, ctx.session.getSession().currentProjectSlug);
+      const result = await ctx.apiClient.getBucketSize(slug, bucketName);
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+      };
+    } catch (error) {
+      return formatErrorResponse(error);
+    }
+  });
+}

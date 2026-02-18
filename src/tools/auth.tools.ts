@@ -1,0 +1,143 @@
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { z } from 'zod';
+import type { ToolContext } from './index.js';
+import { formatErrorResponse } from '../utils/errors.js';
+import { clearCredentials } from '../auth/credentials.service.js';
+
+export function registerAuthTools(server: McpServer, ctx: ToolContext): void {
+
+  // ─── Admin Sign In ───
+  server.registerTool('orbitnest_admin_signin', {
+    description: 'Sign in as an OrbitNest admin user. Returns JWT tokens and saves credentials for subsequent requests.',
+    inputSchema: { email: z.string().email(), password: z.string().min(1) },
+  }, async ({ email, password }) => {
+    try {
+      const result = await ctx.apiClient.signin(email, password);
+      ctx.session.setAuthFromSignin(result);
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify({
+          success: true,
+          message: 'Successfully signed in',
+          user: result.user,
+        }, null, 2) }],
+      };
+    } catch (error) {
+      return formatErrorResponse(error);
+    }
+  });
+
+  // ─── Admin Sign Up (direct) ───
+  server.registerTool('orbitnest_admin_signup', {
+    description: 'Create a new OrbitNest admin account directly.',
+    inputSchema: { email: z.string().email(), password: z.string().min(8), name: z.string().optional() },
+  }, async ({ email, password, name }) => {
+    try {
+      const result = await ctx.apiClient.signup(email, password, name);
+      ctx.session.setAuthFromSignin(result);
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify({
+          success: true,
+          message: 'Admin account created successfully',
+          data: result,
+        }, null, 2) }],
+      };
+    } catch (error) {
+      return formatErrorResponse(error);
+    }
+  });
+
+  // ─── Admin Sign Up (with verification) ───
+  server.registerTool('orbitnest_admin_signup_verified', {
+    description: 'Complete admin signup with email verification code. First call orbitnest_request_verification to get the code.',
+    inputSchema: { email: z.string().email(), password: z.string().min(8), verificationCode: z.string().min(1) },
+  }, async ({ email, password, verificationCode }) => {
+    try {
+      const result = await ctx.apiClient.signupWithVerification(email, password, verificationCode);
+      ctx.session.setAuthFromSignin(result);
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify({
+          success: true,
+          message: 'Admin account created and verified successfully',
+          data: result,
+        }, null, 2) }],
+      };
+    } catch (error) {
+      return formatErrorResponse(error);
+    }
+  });
+
+  // ─── Request Verification Code ───
+  server.registerTool('orbitnest_request_verification', {
+    description: 'Request an email verification code for admin signup.',
+    inputSchema: { email: z.string().email(), password: z.string().min(8), name: z.string().optional() },
+  }, async ({ email, password, name }) => {
+    try {
+      const result = await ctx.apiClient.requestVerification(email, password, name);
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify({
+          success: true,
+          message: 'Verification code sent to email',
+          data: result,
+        }, null, 2) }],
+      };
+    } catch (error) {
+      return formatErrorResponse(error);
+    }
+  });
+
+  // ─── Refresh Token ───
+  server.registerTool('orbitnest_refresh_token', {
+    description: 'Refresh expired JWT access token using stored refresh token.',
+    inputSchema: {},
+  }, async () => {
+    try {
+      await ctx.session.refreshAccessToken();
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify({
+          success: true,
+          message: 'Access token refreshed successfully',
+        }, null, 2) }],
+      };
+    } catch (error) {
+      return formatErrorResponse(error);
+    }
+  });
+
+  // ─── Sign Out ───
+  server.registerTool('orbitnest_admin_signout', {
+    description: 'Sign out the current admin user and clear stored credentials.',
+    inputSchema: {},
+  }, async () => {
+    try {
+      await ctx.session.ensureAuthenticated();
+      const refreshToken = ctx.session.getSession().refreshToken;
+      if (refreshToken) await ctx.apiClient.signout(refreshToken);
+      ctx.session.clearSession();
+      clearCredentials();
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify({
+          success: true,
+          message: 'Signed out successfully',
+        }, null, 2) }],
+      };
+    } catch (error) {
+      return formatErrorResponse(error);
+    }
+  });
+
+  // ─── Get Profile ───
+  server.registerTool('orbitnest_get_profile', {
+    description: 'Get the current admin user profile.',
+    inputSchema: {},
+  }, async () => {
+    try {
+      await ctx.session.ensureAuthenticated();
+      const result = await ctx.apiClient.getProfile();
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+      };
+    } catch (error) {
+      return formatErrorResponse(error);
+    }
+  });
+}

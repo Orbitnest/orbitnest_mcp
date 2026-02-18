@@ -1,0 +1,99 @@
+export interface McpSession {
+  userId: string | null;
+  email: string | null;
+  accessToken: string | null;
+  refreshToken: string | null;
+  tokenExpiresAt: Date | null;
+
+  currentProjectId: string | null;
+  currentProjectSlug: string | null;
+  environment: 'development' | 'staging' | 'production';
+
+  schemaSnapshot: DatabaseSchema | null;
+  projectMetadata: ProjectMetadata | null;
+
+  apiUrl: string;
+  safetyEnabled: boolean;
+}
+
+export interface DatabaseSchema {
+  tables: TableMetadata[];
+  functions: FunctionMetadata[];
+  policies: PolicyMetadata[];
+  lastUpdated: Date;
+}
+
+export interface TableMetadata {
+  tableName: string;
+  schemaName: string;
+  columns: ColumnInfo[];
+  constraints: ConstraintInfo[];
+  indexes: IndexInfo[];
+  rlsEnabled: boolean;
+  isAuthTable: boolean;
+  estimatedRows?: number;
+}
+
+export interface ColumnInfo {
+  columnName: string;
+  dataType: string;
+  isNullable: boolean;
+  defaultValue: string | null;
+  isPrimaryKey: boolean;
+  isForeignKey: boolean;
+  references: { table: string; column: string } | null;
+}
+
+export interface ConstraintInfo {
+  name: string;
+  type: string;
+  definition: string;
+}
+
+export interface IndexInfo {
+  name: string;
+  columns: string[];
+  isUnique: boolean;
+}
+
+export interface FunctionMetadata {
+  name: string;
+  language: string;
+  returnType: string;
+  arguments: string;
+}
+
+export interface PolicyMetadata {
+  policyName: string;
+  tableName: string;
+  command: string;
+  roles: string[];
+  using: string | null;
+  withCheck: string | null;
+}
+
+export interface ProjectMetadata {
+  id: string;
+  name: string;
+  slug: string;
+  dbName: string;
+  createdAt: string;
+  settings?: Record<string, unknown>;
+}
+
+export interface WorkspaceConfig {
+  projectId: string;
+  projectSlug: string;
+  environment: 'development' | 'staging' | 'production';
+  apiUrl: string;
+}
+
+export interface StoredCredentials {
+  access_token: string;
+  refresh_token: string;
+  expires_at: string;
+  user: {
+    id: string;
+    email: string;
+  };
+}
