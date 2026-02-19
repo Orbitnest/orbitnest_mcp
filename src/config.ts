@@ -22,7 +22,7 @@ function envInt(key: string, fallback: number): number {
 
 export function loadConfig(): AppConfig {
   return {
-    apiUrl: env('ORBITNEST_API_URL', 'http://localhost:3002'),
+    apiUrl: env('ORBITNEST_API_URL', 'https://api.orbitnest.io'),
     apiBasePath: env('ORBITNEST_API_BASE_PATH', '/api'),
     serverName: env('MCP_SERVER_NAME', 'orbitnest-studio'),
     serverVersion: env('MCP_SERVER_VERSION', '1.0.0'),

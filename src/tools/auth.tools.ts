@@ -18,7 +18,6 @@ export function registerAuthTools(server: McpServer, ctx: ToolContext): void {
         content: [{ type: 'text' as const, text: JSON.stringify({
           success: true,
           message: 'Successfully signed in',
-          user: result.user,
         }, null, 2) }],
       };
     } catch (error) {

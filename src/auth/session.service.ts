@@ -1,7 +1,7 @@
 import type { McpSession, DatabaseSchema, ProjectMetadata } from '../types/session.types.js';
 import type { AppConfig } from '../types/config.types.js';
 import { loadCredentials, saveCredentials } from './credentials.service.js';
-import { needsRefresh, getTokenExpiry } from './token.service.js';
+import { needsRefresh, getTokenExpiry, decodeTokenPayload } from './token.service.js';
 import { OrbitNestClient } from '../sdk/orbitnest.client.js';
 import { AuthenticationError } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
@@ -95,11 +95,35 @@ export class SessionService {
   }
 
   setAuthFromSignin(data: Record<string, unknown>): void {
-    const user = data.user as Record<string, string>;
-    this.session.accessToken = data.access_token as string;
-    this.session.refreshToken = data.refresh_token as string;
-    this.session.userId = user.id;
-    this.session.email = user.email;
+    if (!data.access_token || !data.refresh_token) {
+      throw new Error(`Invalid signin response: missing tokens. Response: ${JSON.stringify(data)}`);
+    }
+    
+    const accessToken = data.access_token as string;
+    const refreshToken = data.refresh_token as string;
+    
+    // Extract user info from response or JWT token
+    let userId: string;
+    let email: string;
+    
+    const user = data.user as Record<string, string> | undefined;
+    if (user?.id && user?.email) {
+      userId = user.id;
+      email = user.email;
+    } else {
+      // Extract from JWT payload
+      const payload = decodeTokenPayload(accessToken);
+      if (!payload || !payload.sub || !payload.email) {
+        throw new Error(`Invalid signin response: cannot extract user info from token. Response: ${JSON.stringify(data)}`);
+      }
+      userId = payload.sub as string;
+      email = payload.email as string;
+    }
+    
+    this.session.accessToken = accessToken;
+    this.session.refreshToken = refreshToken;
+    this.session.userId = userId;
+    this.session.email = email;
 
     const expiresIn = data.expires_in as number;
     this.session.tokenExpiresAt = expiresIn

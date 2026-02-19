@@ -3,11 +3,30 @@
   "version": "1.0.0",
   "description": "Model Context Protocol server for OrbitNest Studio",
   "main": "dist/index.js",
+  "bin": {
+    "orbitnest-mcp": "dist/index.js"
+  },
   "type": "module",
   "scripts": {
     "build": "tsc",
+    "prepare": "npm run build",
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts"
+  },
+  "files": [
+    "dist/",
+    "src/",
+    ".env.example",
+    ".mcp.json",
+    "README.md",
+    "tsconfig.json"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mahtab-ali/orbitnest_mcp.git"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",

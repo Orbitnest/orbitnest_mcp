@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import { loadConfig } from './config.js';
 import { setLogLevel } from './utils/logger.js';
 import { logger } from './utils/logger.js';
