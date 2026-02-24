@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "orbitnest": {
-      "command": "npx",
+      "command": "/Users/ali/.nvm/versions/node/v22.21.1/bin/npx",
       "args": ["-y", "github:mahtab-ali/orbitnest_mcp"],
       "env": {
         "ORBITNEST_API_URL": "https://api.orbitnest.io",
@@ -13,7 +13,8 @@
         "REQUIRE_DESTRUCTIVE_CONFIRMATION": "true",
         "BLOCK_AUTH_TABLE_MUTATIONS": "true",
         "SCHEMA_CACHE_TTL": "300000",
-        "TOKEN_REFRESH_THRESHOLD": "60000"
+        "TOKEN_REFRESH_THRESHOLD": "60000",
+        "PATH": "/Users/ali/.nvm/versions/node/v22.21.1/bin:/usr/local/bin:/usr/bin:/bin"
       }
     }
   }
