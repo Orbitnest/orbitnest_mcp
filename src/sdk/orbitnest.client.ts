@@ -170,7 +170,7 @@ export class OrbitNestClient {
   }
 
   async toggleDebugMode(projectId: string, enabled: boolean) {
-    return this.request<Record<string, unknown>>('PATCH', EP.PROJECTS.DEBUG_MODE(projectId), { is_debug_mode: enabled });
+    return this.request<Record<string, unknown>>('PATCH', EP.PROJECTS.UPDATE(projectId), { is_debug_mode: enabled });
   }
 
   async createProjectApiKeys(projectId: string, data?: { name?: string; description?: string }) {
@@ -322,7 +322,11 @@ export class OrbitNestClient {
   }
 
   async createEnvVariable(projectId: string, data: { key: string; value: string; encrypted?: boolean }) {
-    return this.request<Record<string, unknown>>('POST', EP.PROJECTS.ENV_VARS(projectId), data);
+    return this.request<Record<string, unknown>>('POST', EP.PROJECTS.ENV_VARS(projectId), {
+      name: data.key,
+      value: data.value,
+      is_secret: data.encrypted,
+    });
   }
 
   async updateEnvVariable(projectId: string, name: string, data: { key?: string; value?: string }) {
