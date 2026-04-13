@@ -77,27 +77,6 @@ export function registerFunctionTools(server: McpServer, ctx: ToolContext): void
       const id = requireProjectId(projectId, ctx.session.getSession().currentProjectId);
       const result = await ctx.apiClient.updateFunction(id, functionName, { sourceCode, description });
 
-      // The API has a known server-side bug where the logger throws after a successful
-      // DB update, causing it to return { success: false } even though the function was
-      // saved. Verify by fetching the function and checking the applied changes.
-      const res = result as Record<string, unknown>;
-      if (!res['success']) {
-        const verification = await ctx.apiClient.getFunction(id, functionName);
-        const vres = verification as Record<string, unknown>;
-        const data = vres['data'] as Record<string, unknown> | undefined;
-        const codeMatches = sourceCode === undefined || data?.['sourceCode'] === sourceCode;
-        const descMatches = description === undefined || data?.['description'] === description;
-        if (vres['success'] && codeMatches && descMatches) {
-          return {
-            content: [{ type: 'text' as const, text: JSON.stringify({
-              success: true,
-              data,
-              message: 'Function updated successfully (verified via get)',
-            }, null, 2) }],
-          };
-        }
-      }
-
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
       };
