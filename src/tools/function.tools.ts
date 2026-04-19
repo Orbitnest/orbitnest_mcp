@@ -4,22 +4,35 @@ import type { ToolContext } from './index.js';
 import { formatErrorResponse } from '../utils/errors.js';
 import { requireProjectId } from '../utils/validators.js';
 
+const TIMEOUT_MAP: Record<string, number> = {
+  '10s': 10_000,
+  '30s': 30_000,
+  '60s': 60_000,
+  '120s': 120_000,
+};
+
+function parseTimeoutToMs(label: string): number {
+  return TIMEOUT_MAP[label] ?? 30_000;
+}
+
 export function registerFunctionTools(server: McpServer, ctx: ToolContext): void {
 
   // ─── Create Function ───
   server.registerTool('orbitnest_create_function', {
-    description: 'Create a new edge function with JavaScript/TypeScript source code.',
+    description: 'Create a new edge function with JavaScript/TypeScript source code. Timeout controls how long the function can run before being terminated.',
     inputSchema: {
       projectId: z.string().optional(),
       name: z.string().min(1),
       description: z.string().optional(),
       sourceCode: z.string().min(1),
+      timeout: z.enum(['10s', '30s', '60s', '120s']).optional().describe('Max execution time. Allowed: 10s, 30s (default), 60s, 120s.'),
     },
-  }, async ({ projectId, name, description, sourceCode }) => {
+  }, async ({ projectId, name, description, sourceCode, timeout }) => {
     try {
       await ctx.session.ensureAuthenticated();
       const id = requireProjectId(projectId, ctx.session.getSession().currentProjectId);
-      const result = await ctx.apiClient.createFunction(id, { name, description, sourceCode });
+      const executionConfig = timeout ? { timeout: parseTimeoutToMs(timeout) } : undefined;
+      const result = await ctx.apiClient.createFunction(id, { name, description, sourceCode, executionConfig });
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
       };
@@ -64,18 +77,20 @@ export function registerFunctionTools(server: McpServer, ctx: ToolContext): void
 
   // ─── Update Function ───
   server.registerTool('orbitnest_update_function', {
-    description: 'Update an edge function\'s source code or description.',
+    description: 'Update an edge function\'s source code, description, or timeout.',
     inputSchema: {
       projectId: z.string().optional(),
       functionName: z.string(),
       sourceCode: z.string().optional(),
       description: z.string().optional(),
+      timeout: z.enum(['10s', '30s', '60s', '120s']).optional().describe('Max execution time. Allowed: 10s, 30s, 60s, 120s.'),
     },
-  }, async ({ projectId, functionName, sourceCode, description }) => {
+  }, async ({ projectId, functionName, sourceCode, description, timeout }) => {
     try {
       await ctx.session.ensureAuthenticated();
       const id = requireProjectId(projectId, ctx.session.getSession().currentProjectId);
-      const result = await ctx.apiClient.updateFunction(id, functionName, { sourceCode, description });
+      const executionConfig = timeout ? { timeout: parseTimeoutToMs(timeout) } : undefined;
+      const result = await ctx.apiClient.updateFunction(id, functionName, { sourceCode, description, executionConfig });
 
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],

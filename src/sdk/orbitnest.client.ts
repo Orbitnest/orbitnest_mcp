@@ -283,7 +283,7 @@ export class OrbitNestClient {
 
   // ─── Edge Functions ───
 
-  async createFunction(projectId: string, data: { name: string; description?: string; sourceCode: string }) {
+  async createFunction(projectId: string, data: { name: string; description?: string; sourceCode: string; executionConfig?: { timeout?: number; memory?: number; enableLogs?: boolean } }) {
     return this.request<Record<string, unknown>>('POST', EP.FUNCTIONS.CREATE(projectId), data);
   }
 
@@ -295,7 +295,7 @@ export class OrbitNestClient {
     return this.request<Record<string, unknown>>('GET', EP.FUNCTIONS.GET(projectId, name));
   }
 
-  async updateFunction(projectId: string, name: string, data: { sourceCode?: string; description?: string }) {
+  async updateFunction(projectId: string, name: string, data: { sourceCode?: string; description?: string; executionConfig?: { timeout?: number; memory?: number; enableLogs?: boolean } }) {
     return this.request<Record<string, unknown>>('PUT', EP.FUNCTIONS.UPDATE(projectId, name), data);
   }
 
@@ -313,6 +313,38 @@ export class OrbitNestClient {
     if (opts?.startTime) query['startTime'] = opts.startTime;
     if (opts?.endTime) query['endTime'] = opts.endTime;
     return this.request<unknown[]>('GET', EP.FUNCTIONS.LOGS(projectId, name), undefined, { query });
+  }
+
+  // ─── Background Jobs ───
+
+  async createJob(projectId: string, data: { name: string; description?: string; sourceCode: string; schedule: string; timezone?: string; executionConfig?: { timeout?: number; memory?: number; enableLogs?: boolean } }) {
+    return this.request<Record<string, unknown>>('POST', EP.JOBS.CREATE(projectId), data);
+  }
+
+  async listJobs(projectId: string) {
+    return this.request<unknown[]>('GET', EP.JOBS.LIST(projectId));
+  }
+
+  async getJob(projectId: string, name: string) {
+    return this.request<Record<string, unknown>>('GET', EP.JOBS.GET(projectId, name));
+  }
+
+  async updateJob(projectId: string, name: string, data: { sourceCode?: string; description?: string; schedule?: string; timezone?: string; status?: string; executionConfig?: { timeout?: number; memory?: number; enableLogs?: boolean } }) {
+    return this.request<Record<string, unknown>>('PUT', EP.JOBS.UPDATE(projectId, name), data);
+  }
+
+  async deleteJob(projectId: string, name: string) {
+    return this.request<Record<string, unknown>>('DELETE', EP.JOBS.DELETE(projectId, name));
+  }
+
+  async triggerJob(projectId: string, name: string) {
+    return this.request<Record<string, unknown>>('POST', EP.JOBS.TRIGGER(projectId, name));
+  }
+
+  async getJobRuns(projectId: string, name: string, opts?: { limit?: number }) {
+    const query: Record<string, string> = {};
+    if (opts?.limit !== undefined) query['limit'] = String(opts.limit);
+    return this.request<unknown[]>('GET', EP.JOBS.RUNS(projectId, name), undefined, { query });
   }
 
   // ─── Environment Variables ───
@@ -472,7 +504,16 @@ export class OrbitNestClient {
   }
 
   async updateSmtpSettings(projectId: string, data: Record<string, unknown>) {
-    return this.request<Record<string, unknown>>('PUT', EP.PROJECTS.SMTP(projectId), data);
+    // Map camelCase tool params → snake_case API fields
+    const payload: Record<string, unknown> = {};
+    if (data.host !== undefined)      payload.smtp_host       = data.host;
+    if (data.port !== undefined)      payload.smtp_port       = data.port;
+    if (data.secure !== undefined)    payload.smtp_secure     = data.secure;
+    if (data.username !== undefined)  payload.smtp_user       = data.username;
+    if (data.password !== undefined)  payload.smtp_password   = data.password;
+    if (data.fromEmail !== undefined) payload.smtp_from_email = data.fromEmail;
+    if (data.fromName !== undefined)  payload.smtp_from_name  = data.fromName;
+    return this.request<Record<string, unknown>>('PUT', EP.PROJECTS.SMTP(projectId), payload);
   }
 
   async deleteSmtpSettings(projectId: string) {

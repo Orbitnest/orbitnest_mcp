@@ -25,6 +25,7 @@ import { registerLoggingTools } from './logging.tools.js';
 import { registerAdminTools } from './admin.tools.js';
 import { registerSmtpTools } from './smtp.tools.js';
 import { registerDashboardTools } from './dashboard.tools.js';
+import { registerBackgroundJobsTools } from './background-jobs.tools.js';
 
 export function registerAllTools(server: McpServer, ctx: ToolContext): void {
   registerAuthTools(server, ctx);
@@ -32,6 +33,7 @@ export function registerAllTools(server: McpServer, ctx: ToolContext): void {
   registerDatabaseTools(server, ctx);
   registerRlsTools(server, ctx);
   registerFunctionTools(server, ctx);
+  registerBackgroundJobsTools(server, ctx);
   registerStorageTools(server, ctx);
   registerLoggingTools(server, ctx);
   registerAdminTools(server, ctx);

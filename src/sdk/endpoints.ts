@@ -102,6 +102,17 @@ export const FUNCTIONS = {
   LOGS: (id: string, name: string) => `/projects/${id}/functions/${name}/logs`,
 } as const;
 
+// Background Jobs
+export const JOBS = {
+  CREATE: (id: string) => `/projects/${id}/jobs`,
+  LIST: (id: string) => `/projects/${id}/jobs`,
+  GET: (id: string, name: string) => `/projects/${id}/jobs/${name}`,
+  UPDATE: (id: string, name: string) => `/projects/${id}/jobs/${name}`,
+  DELETE: (id: string, name: string) => `/projects/${id}/jobs/${name}`,
+  TRIGGER: (id: string, name: string) => `/projects/${id}/jobs/${name}/trigger`,
+  RUNS: (id: string, name: string) => `/projects/${id}/jobs/${name}/runs`,
+} as const;
+
 // Storage (project slug-based, for API key auth)
 export const STORAGE = {
   LIST_BUCKETS: (slug: string) => `/projects/${slug}/storage`,

@@ -170,7 +170,7 @@ export function registerProjectTools(server: McpServer, ctx: ToolContext): void 
     try {
       await ctx.session.ensureAuthenticated();
       const id = requireProjectId(projectId, ctx.session.getSession().currentProjectId);
-      const result = await ctx.apiClient.createProjectApiKeys(id, description ? { description } : undefined);
+      const result = await ctx.apiClient.createProjectApiKeys(id, { name: description || 'default' });
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
       };
