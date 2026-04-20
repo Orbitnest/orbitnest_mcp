@@ -148,3 +148,11 @@ export const DASHBOARD = {
   STATS: '/dashboard/stats',
   ACTIVITY: '/dashboard/activity',
 } as const;
+
+// Realtime (admin-scoped; uses JWT auth + project UUID)
+export const REALTIME = {
+  TABLES: (id: string) => `/admin/projects/${id}/realtime/tables`,
+  DISABLE_TABLE: (id: string, schema: string, table: string) =>
+    `/admin/projects/${id}/realtime/tables/${schema}/${table}`,
+  BROADCAST: (id: string) => `/admin/projects/${id}/realtime/broadcast`,
+} as const;

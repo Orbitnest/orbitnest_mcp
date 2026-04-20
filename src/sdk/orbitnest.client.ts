@@ -533,4 +533,43 @@ export class OrbitNestClient {
   async getDashboardActivity() {
     return this.request<unknown[]>('GET', EP.DASHBOARD.ACTIVITY);
   }
+
+  // ─── Realtime ───
+
+  async listRealtimeTables(projectId: string) {
+    return this.request<unknown[]>('GET', EP.REALTIME.TABLES(projectId));
+  }
+
+  async enableRealtimeTable(
+    projectId: string,
+    data: { table: string; schema?: string; columns?: string[] },
+  ) {
+    return this.request<Record<string, unknown>>(
+      'POST',
+      EP.REALTIME.TABLES(projectId),
+      data,
+    );
+  }
+
+  async disableRealtimeTable(
+    projectId: string,
+    schema: string,
+    table: string,
+  ) {
+    return this.request<Record<string, unknown>>(
+      'DELETE',
+      EP.REALTIME.DISABLE_TABLE(projectId, schema, table),
+    );
+  }
+
+  async broadcastRealtime(
+    projectId: string,
+    data: { channel: string; event: string; payload: unknown },
+  ) {
+    return this.request<{ ok: boolean }>(
+      'POST',
+      EP.REALTIME.BROADCAST(projectId),
+      data,
+    );
+  }
 }
