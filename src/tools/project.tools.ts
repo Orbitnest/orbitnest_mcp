@@ -9,7 +9,7 @@ export function registerProjectTools(server: McpServer, ctx: ToolContext): void 
   // ─── Create Project ───
   server.registerTool('orbitnest_create_project', {
     description: 'Create a new OrbitNest project with a dedicated database. Returns project details including API keys.',
-    inputSchema: { name: z.string().min(3).max(50), description: z.string().optional() },
+    inputSchema: { name: z.string().min(3).max(120), description: z.string().max(500).optional() },
   }, async ({ name, description }) => {
     try {
       await ctx.session.ensureAuthenticated();
