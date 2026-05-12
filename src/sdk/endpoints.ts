@@ -156,3 +156,19 @@ export const REALTIME = {
     `/admin/projects/${id}/realtime/tables/${schema}/${table}`,
   BROADCAST: (id: string) => `/admin/projects/${id}/realtime/broadcast`,
 } as const;
+
+// Analytics
+export const ANALYTICS = {
+  INGEST: '/analytics/events',
+  SDK_CONFIG: (id: string) => `/analytics/projects/${id}/sdk-config`,
+  OVERVIEW: (id: string) => `/analytics/projects/${id}/overview`,
+  EVENTS_TIMESERIES: (id: string) => `/analytics/projects/${id}/events/timeseries`,
+  EVENTS_TOP: (id: string) => `/analytics/projects/${id}/events/top`,
+  SCREENS_TOP: (id: string) => `/analytics/projects/${id}/screens/top`,
+  RETENTION: (id: string) => `/analytics/projects/${id}/retention`,
+  FUNNEL: (id: string) => `/analytics/projects/${id}/funnel`,
+  PERFORMANCE: (id: string) => `/analytics/projects/${id}/performance`,
+  CRASHES: (id: string) => `/analytics/projects/${id}/crashes`,
+  TOKENS: (id: string) => `/analytics/projects/${id}/tokens`,
+  TOKEN: (id: string, tokenId: string) => `/analytics/projects/${id}/tokens/${tokenId}`,
+} as const;

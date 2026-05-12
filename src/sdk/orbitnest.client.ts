@@ -361,8 +361,9 @@ export class OrbitNestClient {
     });
   }
 
-  async updateEnvVariable(projectId: string, name: string, data: { key?: string; value?: string }) {
-    return this.request<Record<string, unknown>>('PUT', EP.PROJECTS.ENV_VAR(projectId, name), data);
+  async updateEnvVariable(projectId: string, name: string, data: { value?: string }) {
+    // API only accepts { value } — sending { key } or additional fields returns 400
+    return this.request<Record<string, unknown>>('PUT', EP.PROJECTS.ENV_VAR(projectId, name), { value: data.value });
   }
 
   async deleteEnvVariable(projectId: string, name: string) {
@@ -571,5 +572,97 @@ export class OrbitNestClient {
       EP.REALTIME.BROADCAST(projectId),
       data,
     );
+  }
+
+  // ─── Analytics ───
+
+  async getAnalyticsOverview(projectId: string, opts?: { from?: string; to?: string; granularity?: string; platform?: string; app_version?: string }) {
+    const query: Record<string, string> = {};
+    if (opts?.from) query['from'] = opts.from;
+    if (opts?.to) query['to'] = opts.to;
+    if (opts?.granularity) query['granularity'] = opts.granularity;
+    if (opts?.platform) query['platform'] = opts.platform;
+    if (opts?.app_version) query['app_version'] = opts.app_version;
+    return this.request<Record<string, unknown>>('GET', EP.ANALYTICS.OVERVIEW(projectId), undefined, { query });
+  }
+
+  async getAnalyticsEventTimeseries(projectId: string, opts?: { from?: string; to?: string; granularity?: string; platform?: string; app_version?: string }) {
+    const query: Record<string, string> = {};
+    if (opts?.from) query['from'] = opts.from;
+    if (opts?.to) query['to'] = opts.to;
+    if (opts?.granularity) query['granularity'] = opts.granularity;
+    if (opts?.platform) query['platform'] = opts.platform;
+    if (opts?.app_version) query['app_version'] = opts.app_version;
+    return this.request<Record<string, unknown>>('GET', EP.ANALYTICS.EVENTS_TIMESERIES(projectId), undefined, { query });
+  }
+
+  async getTopAnalyticsEvents(projectId: string, opts?: { from?: string; to?: string; granularity?: string; platform?: string; app_version?: string; limit?: number }) {
+    const query: Record<string, string> = {};
+    if (opts?.from) query['from'] = opts.from;
+    if (opts?.to) query['to'] = opts.to;
+    if (opts?.granularity) query['granularity'] = opts.granularity;
+    if (opts?.platform) query['platform'] = opts.platform;
+    if (opts?.app_version) query['app_version'] = opts.app_version;
+    if (opts?.limit !== undefined) query['limit'] = String(opts.limit);
+    return this.request<Record<string, unknown>>('GET', EP.ANALYTICS.EVENTS_TOP(projectId), undefined, { query });
+  }
+
+  async getTopAnalyticsScreens(projectId: string, opts?: { from?: string; to?: string; granularity?: string; platform?: string; app_version?: string; limit?: number }) {
+    const query: Record<string, string> = {};
+    if (opts?.from) query['from'] = opts.from;
+    if (opts?.to) query['to'] = opts.to;
+    if (opts?.granularity) query['granularity'] = opts.granularity;
+    if (opts?.platform) query['platform'] = opts.platform;
+    if (opts?.app_version) query['app_version'] = opts.app_version;
+    if (opts?.limit !== undefined) query['limit'] = String(opts.limit);
+    return this.request<Record<string, unknown>>('GET', EP.ANALYTICS.SCREENS_TOP(projectId), undefined, { query });
+  }
+
+  async getAnalyticsRetention(projectId: string, opts?: { from?: string; to?: string; granularity?: string }) {
+    const query: Record<string, string> = {};
+    if (opts?.from) query['from'] = opts.from;
+    if (opts?.to) query['to'] = opts.to;
+    if (opts?.granularity) query['granularity'] = opts.granularity;
+    return this.request<Record<string, unknown>>('GET', EP.ANALYTICS.RETENTION(projectId), undefined, { query });
+  }
+
+  async getAnalyticsFunnel(projectId: string, data: { steps: string[]; from?: string; to?: string }) {
+    return this.request<Record<string, unknown>>('POST', EP.ANALYTICS.FUNNEL(projectId), data);
+  }
+
+  async getAnalyticsPerformance(projectId: string, opts?: { from?: string; to?: string; granularity?: string; platform?: string; app_version?: string }) {
+    const query: Record<string, string> = {};
+    if (opts?.from) query['from'] = opts.from;
+    if (opts?.to) query['to'] = opts.to;
+    if (opts?.granularity) query['granularity'] = opts.granularity;
+    if (opts?.platform) query['platform'] = opts.platform;
+    if (opts?.app_version) query['app_version'] = opts.app_version;
+    return this.request<Record<string, unknown>>('GET', EP.ANALYTICS.PERFORMANCE(projectId), undefined, { query });
+  }
+
+  async getAnalyticsCrashes(projectId: string, opts?: { from?: string; to?: string; granularity?: string; platform?: string; app_version?: string }) {
+    const query: Record<string, string> = {};
+    if (opts?.from) query['from'] = opts.from;
+    if (opts?.to) query['to'] = opts.to;
+    if (opts?.granularity) query['granularity'] = opts.granularity;
+    if (opts?.platform) query['platform'] = opts.platform;
+    if (opts?.app_version) query['app_version'] = opts.app_version;
+    return this.request<Record<string, unknown>>('GET', EP.ANALYTICS.CRASHES(projectId), undefined, { query });
+  }
+
+  async createAnalyticsToken(projectId: string, data?: { name?: string }) {
+    return this.request<Record<string, unknown>>('POST', EP.ANALYTICS.TOKENS(projectId), data ?? {});
+  }
+
+  async listAnalyticsTokens(projectId: string) {
+    return this.request<Record<string, unknown>>('GET', EP.ANALYTICS.TOKENS(projectId));
+  }
+
+  async updateAnalyticsToken(projectId: string, tokenId: string, data: { is_active: boolean }) {
+    return this.request<Record<string, unknown>>('PATCH', EP.ANALYTICS.TOKEN(projectId, tokenId), data);
+  }
+
+  async revokeAnalyticsToken(projectId: string, tokenId: string) {
+    return this.request<Record<string, unknown>>('DELETE', EP.ANALYTICS.TOKEN(projectId, tokenId));
   }
 }

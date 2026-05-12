@@ -27,6 +27,7 @@ import { registerSmtpTools } from './smtp.tools.js';
 import { registerDashboardTools } from './dashboard.tools.js';
 import { registerBackgroundJobsTools } from './background-jobs.tools.js';
 import { registerRealtimeTools } from './realtime.tools.js';
+import { registerAnalyticsTools } from './analytics.tools.js';
 
 export function registerAllTools(server: McpServer, ctx: ToolContext): void {
   registerAuthTools(server, ctx);
@@ -41,4 +42,5 @@ export function registerAllTools(server: McpServer, ctx: ToolContext): void {
   registerSmtpTools(server, ctx);
   registerDashboardTools(server, ctx);
   registerRealtimeTools(server, ctx);
+  registerAnalyticsTools(server, ctx);
 }
