@@ -40,7 +40,7 @@ export function registerProjectTools(server: McpServer, ctx: ToolContext): void 
 
   // ─── Get Project ───
   server.registerTool('orbitnest_get_project', {
-    description: 'Get detailed information about a specific project.',
+    description: 'Get detailed information about a specific project. IMPORTANT: projectId must be the project UUID (e.g. f354f2cf-...), NOT the project slug.',
     inputSchema: { projectId: z.string().optional() },
   }, async ({ projectId }) => {
     try {

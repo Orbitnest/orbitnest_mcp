@@ -19,7 +19,7 @@ export function registerFunctionTools(server: McpServer, ctx: ToolContext): void
 
   // ─── Create Function ───
   server.registerTool('orbitnest_create_function', {
-    description: 'Create a new edge function with JavaScript/TypeScript source code. Timeout controls how long the function can run before being terminated.',
+    description: 'Create a new edge function. IMPORTANT: projectId must be the project UUID (e.g. f354f2cf-...), NOT the project slug — passing the slug causes a silent 500 error. Edge function code format requirements: must be plain JavaScript (no TypeScript type annotations), use `async function handler(req) { ... }` and end with `export default handler`.',
     inputSchema: {
       projectId: z.string().optional(),
       name: z.string().min(1),
@@ -43,7 +43,7 @@ export function registerFunctionTools(server: McpServer, ctx: ToolContext): void
 
   // ─── List Functions ───
   server.registerTool('orbitnest_list_functions', {
-    description: 'List all edge functions for a project.',
+    description: 'List all edge functions for a project. IMPORTANT: projectId must be the project UUID (not the slug). Returns function names, descriptions, status, and timestamps — but not source code (use get_function for that).',
     inputSchema: { projectId: z.string().optional() },
   }, async ({ projectId }) => {
     try {
@@ -77,7 +77,7 @@ export function registerFunctionTools(server: McpServer, ctx: ToolContext): void
 
   // ─── Update Function ───
   server.registerTool('orbitnest_update_function', {
-    description: 'Update an edge function\'s source code, description, or timeout.',
+    description: 'Update an edge function\'s source code, description, or timeout. IMPORTANT: projectId must be the project UUID (e.g. f354f2cf-...), NOT the project slug. Edge function code format requirements: must be plain JavaScript (no TypeScript type annotations), use `async function handler(req) { ... }` and end with `export default handler`.',
     inputSchema: {
       projectId: z.string().optional(),
       functionName: z.string(),
@@ -153,7 +153,7 @@ export function registerFunctionTools(server: McpServer, ctx: ToolContext): void
 
   // ─── Manage Environment Variables ───
   server.registerTool('orbitnest_get_env_variables', {
-    description: 'Get all environment variables for a project\'s edge functions.',
+    description: 'List environment variable names for a project. Note: values are not returned for security — the API only exposes variable names (values appear as ***HIDDEN*** or ***ENCRYPTED***).',
     inputSchema: { projectId: z.string().optional() },
   }, async ({ projectId }) => {
     try {
@@ -190,18 +190,17 @@ export function registerFunctionTools(server: McpServer, ctx: ToolContext): void
   });
 
   server.registerTool('orbitnest_update_env_variable', {
-    description: 'Update an existing environment variable.',
+    description: 'Update an existing environment variable. Pass the variable\'s name (e.g. STRIPE_SECRET_KEY), not its ID. The API accepts only { value } in the request body — renaming a variable is not supported.',
     inputSchema: {
       projectId: z.string().optional(),
-      variableId: z.string(),
-      key: z.string().optional(),
-      value: z.string().optional(),
+      variableName: z.string().describe('The variable name (e.g. STRIPE_SECRET_KEY), not its UUID.'),
+      value: z.string(),
     },
-  }, async ({ projectId, variableId, key, value }) => {
+  }, async ({ projectId, variableName, value }) => {
     try {
       await ctx.session.ensureAuthenticated();
       const id = requireProjectId(projectId, ctx.session.getSession().currentProjectId);
-      const result = await ctx.apiClient.updateEnvVariable(id, variableId, { key, value });
+      const result = await ctx.apiClient.updateEnvVariable(id, variableName, { value });
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
       };
@@ -211,13 +210,13 @@ export function registerFunctionTools(server: McpServer, ctx: ToolContext): void
   });
 
   server.registerTool('orbitnest_delete_env_variable', {
-    description: 'Delete an environment variable.',
-    inputSchema: { projectId: z.string().optional(), variableId: z.string() },
-  }, async ({ projectId, variableId }) => {
+    description: 'Delete an environment variable. Pass the variable\'s name (e.g. STRIPE_SECRET_KEY), not its ID.',
+    inputSchema: { projectId: z.string().optional(), variableName: z.string().describe('The variable name (e.g. STRIPE_SECRET_KEY), not its UUID.') },
+  }, async ({ projectId, variableName }) => {
     try {
       await ctx.session.ensureAuthenticated();
       const id = requireProjectId(projectId, ctx.session.getSession().currentProjectId);
-      const result = await ctx.apiClient.deleteEnvVariable(id, variableId);
+      const result = await ctx.apiClient.deleteEnvVariable(id, variableName);
       return {
         content: [{ type: 'text' as const, text: JSON.stringify({ success: true, data: result }, null, 2) }],
       };
