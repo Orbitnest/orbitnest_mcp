@@ -190,13 +190,27 @@ To point at a different backend URL, change `ORBITNEST_API_URL` in the `env` blo
 Once connected via Claude Code or VSCode, authenticate and set your project context:
 
 **1. Sign in as admin:**
+
+If your account has a password:
 ```
 Use orbitnest_admin_signin with:
   email: "admin@example.com"
   password: "your-password"
 ```
 
+If you signed up with **Google, GitHub, or Apple** (no password), use OAuth.
+This opens your browser to complete sign-in and captures the session
+automatically via a one-time localhost callback:
+```
+Use orbitnest_login with:
+  provider: "google"   # or "github" / "apple"
+```
+
 Credentials are saved to `~/.orbitnest/credentials.json` and reloaded automatically on subsequent starts.
+
+> `orbitnest_login` opens a browser, so run it on the machine where the MCP
+> server runs. It requires `ORBITNEST_API_URL` to point at the OrbitNest API
+> whose Studio hosts the OAuth callback page (default `https://api.orbitnest.io`).
 
 **2. List your projects:**
 ```
@@ -215,10 +229,11 @@ All subsequent tools automatically use the active project — you rarely need to
 
 ## Available Tools
 
-### Authentication (7 tools)
+### Authentication (8 tools)
 | Tool | Description |
 |------|-------------|
-| `orbitnest_admin_signin` | Sign in and save JWT credentials |
+| `orbitnest_admin_signin` | Sign in with email + password and save JWT credentials |
+| `orbitnest_login` | Sign in with Google / GitHub / Apple via browser (for password-less accounts) |
 | `orbitnest_admin_signup` | Create a new admin account |
 | `orbitnest_admin_signup_verified` | Signup with email verification |
 | `orbitnest_request_verification` | Request verification code |

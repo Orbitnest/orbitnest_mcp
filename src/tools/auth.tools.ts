@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { ToolContext } from './index.js';
 import { formatErrorResponse } from '../utils/errors.js';
 import { clearCredentials } from '../auth/credentials.service.js';
+import { loginWithOAuth } from '../auth/oauth-login.js';
 
 export function registerAuthTools(server: McpServer, ctx: ToolContext): void {
 
@@ -18,6 +19,31 @@ export function registerAuthTools(server: McpServer, ctx: ToolContext): void {
         content: [{ type: 'text' as const, text: JSON.stringify({
           success: true,
           message: 'Successfully signed in',
+        }, null, 2) }],
+      };
+    } catch (error) {
+      return formatErrorResponse(error);
+    }
+  });
+
+  // ─── Admin Sign In via OAuth (Google / GitHub / Apple) ───
+  // For admins who signed up with a provider and have no password. Opens the
+  // browser to the existing OAuth flow and captures tokens via a one-time
+  // localhost loopback server. See ../auth/oauth-login.ts.
+  server.registerTool('orbitnest_login', {
+    description:
+      'Sign in as an OrbitNest admin using Google, GitHub, or Apple. Opens your browser to complete sign-in, then captures the session automatically. Use this if you signed up with a social provider (no password). For password accounts use orbitnest_admin_signin.',
+    inputSchema: { provider: z.enum(['google', 'github', 'apple']).default('google') },
+  }, async ({ provider }) => {
+    try {
+      const result = await loginWithOAuth(provider, ctx.config);
+      ctx.session.setAuthFromSignin(result as unknown as Record<string, unknown>);
+      const { email } = ctx.session.getSession();
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify({
+          success: true,
+          message: `Successfully signed in with ${provider}`,
+          email,
         }, null, 2) }],
       };
     } catch (error) {
