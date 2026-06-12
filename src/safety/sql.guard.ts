@@ -12,7 +12,11 @@ export interface SqlAnalysis {
   hasInjectionPatterns: boolean;
 }
 
-const DESTRUCTIVE_KEYWORDS = ['DROP', 'TRUNCATE', 'DELETE', 'ALTER'];
+// MEDIUM-01: include the previously-missing write/privilege keywords so a
+// mass `UPDATE accounts SET role='admin'`, a `GRANT ... TO public`, or a bulk
+// `INSERT` is correctly classified destructive and requires confirmDestructive
+// rather than running silently.
+const DESTRUCTIVE_KEYWORDS = ['DROP', 'TRUNCATE', 'DELETE', 'ALTER', 'UPDATE', 'INSERT', 'GRANT', 'REVOKE'];
 const WRITE_KEYWORDS = ['INSERT', 'UPDATE', 'DELETE', 'CREATE', 'DROP', 'TRUNCATE', 'ALTER', 'GRANT', 'REVOKE'];
 
 const INJECTION_PATTERNS = [

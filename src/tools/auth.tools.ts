@@ -59,11 +59,16 @@ export function registerAuthTools(server: McpServer, ctx: ToolContext): void {
     try {
       const result = await ctx.apiClient.signup(email, password, name);
       ctx.session.setAuthFromSignin(result);
+      // HIGH-03: never echo the raw signin response — it carries the access +
+      // long-lived refresh token, which would land in the model's context /
+      // transcript and could be replayed for admin access. The tokens are
+      // already applied to the local session above; return only safe fields.
+      const { email: sessionEmail } = ctx.session.getSession();
       return {
         content: [{ type: 'text' as const, text: JSON.stringify({
           success: true,
           message: 'Admin account created successfully',
-          data: result,
+          email: sessionEmail,
         }, null, 2) }],
       };
     } catch (error) {
@@ -79,11 +84,13 @@ export function registerAuthTools(server: McpServer, ctx: ToolContext): void {
     try {
       const result = await ctx.apiClient.signupWithVerification(email, password, verificationCode);
       ctx.session.setAuthFromSignin(result);
+      // HIGH-03: strip tokens from the tool output (see orbitnest_admin_signup).
+      const { email: sessionEmail } = ctx.session.getSession();
       return {
         content: [{ type: 'text' as const, text: JSON.stringify({
           success: true,
           message: 'Admin account created and verified successfully',
-          data: result,
+          email: sessionEmail,
         }, null, 2) }],
       };
     } catch (error) {

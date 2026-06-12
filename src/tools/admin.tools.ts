@@ -38,16 +38,28 @@ export function registerAdminTools(server: McpServer, ctx: ToolContext): void {
   });
 
   // ─── Create Admin ───
+  // HIGH-02: provisioning a new platform admin is identity-mutating and can
+  // create a persistent backdoor, so it requires an explicit confirmation flag
+  // (matching delete_admin) rather than running silently.
   server.registerTool('orbitnest_create_admin', {
-    description: 'Create a new admin user.',
+    description: 'Create a new admin user. Requires confirmCreate=true.',
     inputSchema: {
       email: z.string().email(),
       password: z.string().min(8),
       isActive: z.boolean().optional(),
+      confirmCreate: z.boolean(),
     },
-  }, async ({ email, password, isActive }) => {
+  }, async ({ email, password, isActive, confirmCreate }) => {
     try {
       await ctx.session.ensureAuthenticated();
+      if (!confirmCreate) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({
+            success: false,
+            error: 'Creating a platform admin requires confirmCreate=true.',
+          }, null, 2) }],
+        };
+      }
       const result = await ctx.apiClient.createAdmin({ email, password, isActive });
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
@@ -58,16 +70,27 @@ export function registerAdminTools(server: McpServer, ctx: ToolContext): void {
   });
 
   // ─── Update Admin ───
+  // HIGH-02: changing another admin's email / active state is identity-mutating
+  // (can lock out a legitimate admin), so require an explicit confirmation flag.
   server.registerTool('orbitnest_update_admin', {
-    description: 'Update an admin user\'s details.',
+    description: 'Update an admin user\'s details. Requires confirmUpdate=true.',
     inputSchema: {
       adminId: z.string(),
       email: z.string().email().optional(),
       isActive: z.boolean().optional(),
+      confirmUpdate: z.boolean(),
     },
-  }, async ({ adminId, email, isActive }) => {
+  }, async ({ adminId, email, isActive, confirmUpdate }) => {
     try {
       await ctx.session.ensureAuthenticated();
+      if (!confirmUpdate) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({
+            success: false,
+            error: 'Updating an admin requires confirmUpdate=true.',
+          }, null, 2) }],
+        };
+      }
       const result = await ctx.apiClient.updateAdmin(adminId, { email, isActive });
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],

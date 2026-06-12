@@ -7,6 +7,10 @@ export interface OrbitNestClientConfig {
   accessToken: string;
 }
 
+// LOW-01: outbound request timeout (ms). Generous enough for slow operations
+// (large SQL, uploads) but bounded so the agent never hangs indefinitely.
+const REQUEST_TIMEOUT_MS = 60_000;
+
 export class OrbitNestClient {
   private baseUrl: string;
   private accessToken: string;
@@ -45,9 +49,21 @@ export class OrbitNestClient {
       fetchOptions.body = JSON.stringify(body);
     }
 
+    // LOW-01: bound every request so a slow/unresponsive API (or a hostile
+    // redirect target) can't hang the tool call forever.
+    fetchOptions.signal = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+
     logger.debug(`API ${method} ${path}`);
 
-    const response = await fetch(url, fetchOptions);
+    let response: Response;
+    try {
+      response = await fetch(url, fetchOptions);
+    } catch (err) {
+      if (err instanceof Error && err.name === 'TimeoutError') {
+        throw new ApiError(`API ${method} ${path} timed out after ${REQUEST_TIMEOUT_MS}ms`, 504);
+      }
+      throw err;
+    }
 
     if (!response.ok) {
       const errorBody = await response.json().catch(() => ({ message: response.statusText }));

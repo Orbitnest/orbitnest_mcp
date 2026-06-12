@@ -95,8 +95,11 @@ export class SessionService {
   }
 
   setAuthFromSignin(data: Record<string, unknown>): void {
+    // HIGH-03: never embed `data` in error messages — it may contain token
+    // material that would then surface in the model's context via
+    // formatErrorResponse.
     if (!data.access_token || !data.refresh_token) {
-      throw new Error(`Invalid signin response: missing tokens. Response: ${JSON.stringify(data)}`);
+      throw new Error('Invalid signin response: missing access/refresh tokens.');
     }
     
     const accessToken = data.access_token as string;
@@ -114,7 +117,7 @@ export class SessionService {
       // Extract from JWT payload
       const payload = decodeTokenPayload(accessToken);
       if (!payload || !payload.sub || !payload.email) {
-        throw new Error(`Invalid signin response: cannot extract user info from token. Response: ${JSON.stringify(data)}`);
+        throw new Error('Invalid signin response: cannot extract user info from token.');
       }
       userId = payload.sub as string;
       email = payload.email as string;
