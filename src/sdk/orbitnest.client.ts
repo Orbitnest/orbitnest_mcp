@@ -251,12 +251,17 @@ export class OrbitNestClient {
     return this.request<TableDataResponse>('GET', EP.DATABASE.TABLE_DATA(projectId, tableName), undefined, { query });
   }
 
+  // NOTE: the row/bulk endpoints wrap the payload — the API reads `data`,
+  // `updates`, and `conditions` off the body (NOT the raw object / `rows` /
+  // `ids`). Sending the wrong envelope makes the API see an empty payload and
+  // reject it ("Data object cannot be empty"). These wrappers match the
+  // server DTOs exactly.
   async insertRow(projectId: string, tableName: string, data: Record<string, unknown>) {
-    return this.request<Record<string, unknown>>('POST', EP.DATABASE.INSERT_ROW(projectId, tableName), data);
+    return this.request<Record<string, unknown>>('POST', EP.DATABASE.INSERT_ROW(projectId, tableName), { data });
   }
 
   async updateRow(projectId: string, tableName: string, rowId: string, data: Record<string, unknown>) {
-    return this.request<Record<string, unknown>>('PUT', EP.DATABASE.UPDATE_ROW(projectId, tableName, rowId), data);
+    return this.request<Record<string, unknown>>('PUT', EP.DATABASE.UPDATE_ROW(projectId, tableName, rowId), { data });
   }
 
   async deleteRow(projectId: string, tableName: string, rowId: string) {
@@ -264,15 +269,19 @@ export class OrbitNestClient {
   }
 
   async bulkInsert(projectId: string, tableName: string, rows: Record<string, unknown>[]) {
-    return this.request<Record<string, unknown>>('POST', EP.DATABASE.BULK_INSERT(projectId, tableName), { rows });
+    return this.request<Record<string, unknown>>('POST', EP.DATABASE.BULK_INSERT(projectId, tableName), { data: rows });
   }
 
-  async bulkUpdate(projectId: string, tableName: string, rows: Record<string, unknown>[]) {
-    return this.request<Record<string, unknown>>('PUT', EP.DATABASE.BULK_UPDATE(projectId, tableName), { rows });
+  async bulkUpdate(
+    projectId: string,
+    tableName: string,
+    updates: Array<{ where: Record<string, unknown>; data: Record<string, unknown> }>,
+  ) {
+    return this.request<Record<string, unknown>>('PUT', EP.DATABASE.BULK_UPDATE(projectId, tableName), { updates });
   }
 
-  async bulkDelete(projectId: string, tableName: string, ids: string[]) {
-    return this.request<Record<string, unknown>>('DELETE', EP.DATABASE.BULK_DELETE(projectId, tableName), { ids });
+  async bulkDelete(projectId: string, tableName: string, conditions: Array<Record<string, unknown>>) {
+    return this.request<Record<string, unknown>>('DELETE', EP.DATABASE.BULK_DELETE(projectId, tableName), { conditions });
   }
 
   // SQL History

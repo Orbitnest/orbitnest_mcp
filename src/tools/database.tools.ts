@@ -246,19 +246,24 @@ export function registerDatabaseTools(server: McpServer, ctx: ToolContext): void
   });
 
   // ─── Bulk Update ───
+  // Each update is { where, data } — the API matches rows by `where` and
+  // applies `data`. (A flat array of rows can't express which rows to update.)
   server.registerTool('orbitnest_bulk_update', {
-    description: 'Update multiple rows in a table.',
+    description: 'Update multiple rows in a table. Each update is { where, data }: rows matching `where` get `data` applied.',
     inputSchema: {
       projectId: z.string().optional(),
       tableName: z.string(),
-      rows: z.array(z.record(z.unknown())),
+      updates: z.array(z.object({
+        where: z.record(z.unknown()),
+        data: z.record(z.unknown()),
+      })),
     },
-  }, async ({ projectId, tableName, rows }) => {
+  }, async ({ projectId, tableName, updates }) => {
     try {
       await ctx.session.ensureAuthenticated();
       const id = requireProjectId(projectId, ctx.session.getSession().currentProjectId);
       guardTableOperation(tableName, 'UPDATE');
-      const result = await ctx.apiClient.bulkUpdate(id, tableName, rows);
+      const result = await ctx.apiClient.bulkUpdate(id, tableName, updates);
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
       };
@@ -268,15 +273,17 @@ export function registerDatabaseTools(server: McpServer, ctx: ToolContext): void
   });
 
   // ─── Bulk Delete ───
+  // Deletes by `conditions` (each is a column=value match, ANDed). For a simple
+  // id list, pass conditions like [{ id: "..." }, { id: "..." }].
   server.registerTool('orbitnest_bulk_delete', {
-    description: 'Delete multiple rows from a table. Requires confirmation for large operations.',
+    description: 'Delete multiple rows from a table by match conditions. Each condition is a column=value object (e.g. { id: "..." }). Requires confirmation for large operations.',
     inputSchema: {
       projectId: z.string().optional(),
       tableName: z.string(),
-      ids: z.array(z.string()),
+      conditions: z.array(z.record(z.unknown())),
       confirmDeletion: z.boolean(),
     },
-  }, async ({ projectId, tableName, ids, confirmDeletion }) => {
+  }, async ({ projectId, tableName, conditions, confirmDeletion }) => {
     try {
       await ctx.session.ensureAuthenticated();
       const id = requireProjectId(projectId, ctx.session.getSession().currentProjectId);
@@ -288,8 +295,8 @@ export function registerDatabaseTools(server: McpServer, ctx: ToolContext): void
           }, null, 2) }],
         };
       }
-      guardBulkOperation(ids.length, 1000, confirmDeletion);
-      const result = await ctx.apiClient.bulkDelete(id, tableName, ids);
+      guardBulkOperation(conditions.length, 1000, confirmDeletion);
+      const result = await ctx.apiClient.bulkDelete(id, tableName, conditions);
       return {
         content: [{ type: 'text' as const, text: JSON.stringify({ success: true, data: result }, null, 2) }],
       };
