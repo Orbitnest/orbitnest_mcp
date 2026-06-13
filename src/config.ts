@@ -25,7 +25,7 @@ export function loadConfig(): AppConfig {
     apiUrl: env('ORBITNEST_API_URL', 'https://api.orbitnest.io'),
     apiBasePath: env('ORBITNEST_API_BASE_PATH', '/api'),
     serverName: env('MCP_SERVER_NAME', 'orbitnest-studio'),
-    serverVersion: env('MCP_SERVER_VERSION', '1.0.1'),
+    serverVersion: env('MCP_SERVER_VERSION', '1.0.2'),
     logLevel: env('LOG_LEVEL', 'info'),
     defaultProjectId: env('DEFAULT_PROJECT_ID') || null,
     defaultEnvironment: (env('DEFAULT_ENVIRONMENT', 'development') as AppConfig['defaultEnvironment']),

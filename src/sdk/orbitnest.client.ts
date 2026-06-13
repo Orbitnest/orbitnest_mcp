@@ -7,6 +7,24 @@ export interface OrbitNestClientConfig {
   accessToken: string;
 }
 
+/**
+ * Shape returned by the table-data endpoint. Rows live under `data` (NOT
+ * `rows`) — this interface exists so callers stop guessing the envelope. It
+ * mirrors the API's TableDataResult exactly.
+ */
+export interface TableDataResponse {
+  success: boolean;
+  table_name: string;
+  total_rows: number;
+  returned_rows: number;
+  page: number;
+  limit: number;
+  columns: Array<{ name: string; type: string }>;
+  /** The actual rows. This is `data`, not `rows`. */
+  data: Array<Record<string, unknown>>;
+  count: number;
+}
+
 // LOW-01: outbound request timeout (ms). Generous enough for slow operations
 // (large SQL, uploads) but bounded so the agent never hangs indefinitely.
 const REQUEST_TIMEOUT_MS = 60_000;
@@ -229,7 +247,8 @@ export class OrbitNestClient {
     if (opts?.orderBy) query['orderBy'] = opts.orderBy;
     if (opts?.orderDirection) query['orderDirection'] = opts.orderDirection;
     if (opts?.filter) query['filter'] = opts.filter;
-    return this.request<Record<string, unknown>>('GET', EP.DATABASE.TABLE_DATA(projectId, tableName), undefined, { query });
+    // Returns { ..., data: [...] } — see TableDataResponse. Rows are under `data`.
+    return this.request<TableDataResponse>('GET', EP.DATABASE.TABLE_DATA(projectId, tableName), undefined, { query });
   }
 
   async insertRow(projectId: string, tableName: string, data: Record<string, unknown>) {

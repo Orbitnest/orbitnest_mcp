@@ -76,13 +76,22 @@ export class SessionService {
       const accessToken = result.access_token as string;
       const expiresIn = result.expires_in as number;
 
+      // CRITICAL: the server ROTATES refresh tokens — every successful refresh
+      // consumes the presented refresh token and issues a fresh one. We must
+      // persist the new refresh_token; otherwise the next refresh replays the
+      // now-invalidated token, fails with 401, and the user is forced to sign
+      // in again every session. (This was the "MCP is down every time" bug.)
+      // Fall back to the existing token only if the server didn't return one.
+      const newRefreshToken = (result.refresh_token as string | undefined) ?? this.session.refreshToken;
+
       this.session.accessToken = accessToken;
+      this.session.refreshToken = newRefreshToken;
       this.session.tokenExpiresAt = new Date(Date.now() + expiresIn * 1000);
       this.apiClient.setAccessToken(accessToken);
 
       saveCredentials({
         access_token: accessToken,
-        refresh_token: this.session.refreshToken,
+        refresh_token: newRefreshToken,
         expires_at: this.session.tokenExpiresAt.toISOString(),
         user: { id: this.session.userId!, email: this.session.email! },
       });
