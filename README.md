@@ -289,6 +289,8 @@ All subsequent tools automatically use the active project — you rarely need to
 | `orbitnest_invoke_function` | Execute a function |
 | `orbitnest_get_function_logs` | Get function execution logs |
 
+> **Function environment:** inside a function, read env vars with `Deno.env.get('NAME')`. Available by default: `ORBITNEST_URL`, `ORBITNEST_ANON_KEY` (public/RLS-protected), `PROJECT_ID`, `PROJECT_URL`, `FUNCTION_NAME`, plus any project env vars you add. **`ORBITNEST_SERVICE_ROLE_KEY` (RLS-bypassing) is NOT provided by default** — if a function needs privileged DB access, add it as a project env var (copy the service_role key from the dashboard → API Keys, or use `orbitnest_create_env_variable`). See `docs/known-issues.md` §7.
+
 ### Storage (9 tools)
 | Tool | Description |
 |------|-------------|

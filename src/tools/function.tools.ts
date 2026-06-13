@@ -15,11 +15,29 @@ function parseTimeoutToMs(label: string): number {
   return TIMEOUT_MAP[label] ?? 30_000;
 }
 
+// Appended to create/update function descriptions so the agent knows what the
+// function runtime can (and cannot) read — and, crucially, that the service
+// role key is opt-in. Without this, a function written to bypass RLS via
+// ORBITNEST_SERVICE_ROLE_KEY silently gets an empty value and "doesn't work"
+// with no obvious reason.
+const FUNCTION_ENV_NOTE =
+  ' ENVIRONMENT / CREDENTIALS: read env vars inside the function with `Deno.env.get("NAME")`. ' +
+  'Available by default: ORBITNEST_URL, ORBITNEST_ANON_KEY (the PUBLIC, RLS-protected key), ' +
+  'PROJECT_ID, PROJECT_URL, FUNCTION_NAME, plus any project env vars you have added. ' +
+  'IMPORTANT: ORBITNEST_SERVICE_ROLE_KEY (which bypasses RLS / grants full DB access) is NOT ' +
+  'injected by default and will read back as an empty string. If a function needs privileged, ' +
+  'RLS-bypassing access, the user must add it explicitly as a project environment variable — ' +
+  'copy the service_role key from the dashboard (Project → API Keys) and add an env var named ' +
+  'ORBITNEST_SERVICE_ROLE_KEY (or call orbitnest_create_env_variable). Prefer the anon key + RLS ' +
+  'where possible; only request service_role when truly necessary. Do NOT assume ' +
+  'ORBITNEST_SERVICE_ROLE_KEY exists — if a function relying on it returns empty/denied results, ' +
+  'tell the user to add that env var.';
+
 export function registerFunctionTools(server: McpServer, ctx: ToolContext): void {
 
   // ─── Create Function ───
   server.registerTool('orbitnest_create_function', {
-    description: 'Create a new edge function. IMPORTANT: projectId must be the project UUID (e.g. f354f2cf-...), NOT the project slug — passing the slug causes a silent 500 error. Edge function code format requirements: must be plain JavaScript (no TypeScript type annotations), use `async function handler(req) { ... }` and end with `export default handler`.',
+    description: 'Create a new edge function. IMPORTANT: projectId must be the project UUID (e.g. f354f2cf-...), NOT the project slug — passing the slug causes a silent 500 error. Edge function code format requirements: must be plain JavaScript (no TypeScript type annotations), use `async function handler(req) { ... }` and end with `export default handler`.' + FUNCTION_ENV_NOTE,
     inputSchema: {
       projectId: z.string().optional(),
       name: z.string().min(1),
@@ -77,7 +95,7 @@ export function registerFunctionTools(server: McpServer, ctx: ToolContext): void
 
   // ─── Update Function ───
   server.registerTool('orbitnest_update_function', {
-    description: 'Update an edge function\'s source code, description, or timeout. IMPORTANT: projectId must be the project UUID (e.g. f354f2cf-...), NOT the project slug. Edge function code format requirements: must be plain JavaScript (no TypeScript type annotations), use `async function handler(req) { ... }` and end with `export default handler`.',
+    description: 'Update an edge function\'s source code, description, or timeout. IMPORTANT: projectId must be the project UUID (e.g. f354f2cf-...), NOT the project slug. Edge function code format requirements: must be plain JavaScript (no TypeScript type annotations), use `async function handler(req) { ... }` and end with `export default handler`.' + FUNCTION_ENV_NOTE,
     inputSchema: {
       projectId: z.string().optional(),
       functionName: z.string(),
