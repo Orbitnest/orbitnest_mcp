@@ -94,6 +94,47 @@ export class OrbitNestClient {
     return JSON.parse(text) as T;
   }
 
+  /**
+   * Upload a file as multipart/form-data. The storage endpoints use a
+   * FileInterceptor('file') and read `path`/`upsert` form fields — they do NOT
+   * accept a JSON base64 body (that returned "No file provided"). Callers pass
+   * base64 content; we decode it to bytes and post a real multipart form.
+   */
+  private async uploadMultipart<T>(
+    path: string,
+    args: { filePath: string; fileContent: string; contentType?: string; upsert?: boolean },
+  ): Promise<T> {
+    const url = `${this.baseUrl}${path}`;
+    const bytes = Buffer.from(args.fileContent, 'base64');
+    const fileName = args.filePath.split('/').pop() || 'file';
+    const form = new FormData();
+    form.append('file', new Blob([bytes], { type: args.contentType || 'application/octet-stream' }), fileName);
+    form.append('path', args.filePath);
+    if (args.upsert !== undefined) form.append('upsert', String(args.upsert));
+
+    const headers: Record<string, string> = {};
+    if (this.accessToken) headers['Authorization'] = `Bearer ${this.accessToken}`;
+    // NOTE: do NOT set Content-Type — fetch sets the multipart boundary itself.
+
+    let response: Response;
+    try {
+      response = await fetch(url, { method: 'POST', headers, body: form, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+    } catch (err) {
+      if (err instanceof Error && err.name === 'TimeoutError') {
+        throw new ApiError(`Upload ${path} timed out after ${REQUEST_TIMEOUT_MS}ms`, 504);
+      }
+      throw err;
+    }
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({ message: response.statusText }));
+      const msg = (errorBody as Record<string, string>).message || response.statusText;
+      throw new ApiError(`Upload ${path} failed: ${msg}`, response.status);
+    }
+    const text = await response.text();
+    if (!text) return {} as T;
+    return JSON.parse(text) as T;
+  }
+
   // ─── Authentication ───
 
   async signin(email: string, password: string) {
@@ -138,8 +179,13 @@ export class OrbitNestClient {
     return this.request<unknown[]>('GET', EP.ADMIN.LIST);
   }
 
-  async createAdmin(data: { email: string; password: string; isActive?: boolean }) {
-    return this.request<Record<string, unknown>>('POST', EP.ADMIN.CREATE, data);
+  /**
+   * Invite a new admin by email. The platform has no direct create-with-password
+   * route (that's intentional) — admins are added via an invitation they accept
+   * to set their own password. Requires SMTP configured to deliver the invite.
+   */
+  async inviteAdmin(email: string) {
+    return this.request<Record<string, unknown>>('POST', EP.ADMIN.INVITE, { email });
   }
 
   async getAdmin(adminId: string) {
@@ -316,9 +362,19 @@ export class OrbitNestClient {
     command: string;
     using: string;
     withCheck?: string;
-    roles?: string[];
+    role?: string;
   }) {
-    return this.request<Record<string, unknown>>('POST', EP.RLS.POLICIES(projectId, tableName), data);
+    // The API DTO uses snake_case `name` / `with_check` / singular `role`
+    // (NOT policyName / withCheck / roles[]). Sending the camelCase shape made
+    // validation reject the body (400). Map to the server contract here.
+    const payload: Record<string, unknown> = {
+      name: data.policyName,
+      command: data.command,
+      using: data.using,
+    };
+    if (data.withCheck !== undefined) payload.with_check = data.withCheck;
+    if (data.role !== undefined) payload.role = data.role;
+    return this.request<Record<string, unknown>>('POST', EP.RLS.POLICIES(projectId, tableName), payload);
   }
 
   async deletePolicy(projectId: string, tableName: string, policyName: string) {
@@ -439,7 +495,7 @@ export class OrbitNestClient {
   async adminUploadFile(projectId: string, bucketName: string, data: {
     filePath: string; fileContent: string; contentType?: string; upsert?: boolean;
   }) {
-    return this.request<Record<string, unknown>>('POST', EP.ADMIN_STORAGE.UPLOAD(projectId, bucketName), data);
+    return this.uploadMultipart<Record<string, unknown>>(EP.ADMIN_STORAGE.UPLOAD(projectId, bucketName), data);
   }
 
   async adminGetBucketSize(projectId: string, bucketName: string) {
@@ -474,7 +530,7 @@ export class OrbitNestClient {
   async uploadFile(projectSlug: string, bucketName: string, data: {
     filePath: string; fileContent: string; contentType?: string; upsert?: boolean;
   }) {
-    return this.request<Record<string, unknown>>('POST', EP.STORAGE.UPLOAD(projectSlug, bucketName), data);
+    return this.uploadMultipart<Record<string, unknown>>(EP.STORAGE.UPLOAD(projectSlug, bucketName), data);
   }
 
   async downloadFile(projectSlug: string, bucketName: string, filePath: string) {

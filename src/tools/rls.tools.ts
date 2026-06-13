@@ -97,14 +97,14 @@ export function registerRlsTools(server: McpServer, ctx: ToolContext): void {
       command: z.enum(['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'ALL']),
       using: z.string(),
       withCheck: z.string().optional(),
-      roles: z.array(z.string()).optional(),
+      role: z.string().optional(),
     },
-  }, async ({ projectId, tableName, policyName, command, using, withCheck, roles }) => {
+  }, async ({ projectId, tableName, policyName, command, using, withCheck, role }) => {
     try {
       await ctx.session.ensureAuthenticated();
       const id = requireProjectId(projectId, ctx.session.getSession().currentProjectId);
       const result = await ctx.apiClient.createPolicy(id, tableName, {
-        policyName, command, using, withCheck, roles,
+        policyName, command, using, withCheck, role,
       });
       return {
         content: [{ type: 'text' as const, text: JSON.stringify({ success: true, data: result }, null, 2) }],

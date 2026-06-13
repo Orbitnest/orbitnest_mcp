@@ -37,32 +37,31 @@ export function registerAdminTools(server: McpServer, ctx: ToolContext): void {
     }
   });
 
-  // ─── Create Admin ───
-  // HIGH-02: provisioning a new platform admin is identity-mutating and can
-  // create a persistent backdoor, so it requires an explicit confirmation flag
-  // (matching delete_admin) rather than running silently.
+  // ─── Invite Admin ───
+  // HIGH-02: provisioning a new platform admin is identity-mutating, so it
+  // requires an explicit confirmation flag. NOTE: the platform has no direct
+  // create-with-password endpoint by design — a new admin is INVITED by email
+  // and sets their own password by accepting the invite. Requires SMTP.
   server.registerTool('orbitnest_create_admin', {
-    description: 'Create a new admin user. Requires confirmCreate=true.',
+    description: 'Invite a new admin by email (the platform adds admins via invitation, not direct password creation; requires SMTP configured). Requires confirmCreate=true.',
     inputSchema: {
       email: z.string().email(),
-      password: z.string().min(8),
-      isActive: z.boolean().optional(),
       confirmCreate: z.boolean(),
     },
-  }, async ({ email, password, isActive, confirmCreate }) => {
+  }, async ({ email, confirmCreate }) => {
     try {
       await ctx.session.ensureAuthenticated();
       if (!confirmCreate) {
         return {
           content: [{ type: 'text' as const, text: JSON.stringify({
             success: false,
-            error: 'Creating a platform admin requires confirmCreate=true.',
+            error: 'Inviting a platform admin requires confirmCreate=true.',
           }, null, 2) }],
         };
       }
-      const result = await ctx.apiClient.createAdmin({ email, password, isActive });
+      const result = await ctx.apiClient.inviteAdmin(email);
       return {
-        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+        content: [{ type: 'text' as const, text: JSON.stringify({ success: true, data: result }, null, 2) }],
       };
     } catch (error) {
       return formatErrorResponse(error);

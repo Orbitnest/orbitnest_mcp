@@ -33,7 +33,10 @@ export const AUTH = {
 // Admin Management
 export const ADMIN = {
   LIST: '/admin/admins',
-  CREATE: '/admin/admins',
+  // There is no direct "create admin with password" endpoint by design — new
+  // admins are added via an email invitation (which they accept to set their
+  // own password). createAdmin() posts here. (Requires SMTP configured.)
+  INVITE: '/admin/invitations',
   GET: (id: string) => `/admin/admins/${e(id)}`,
   UPDATE: (id: string) => `/admin/admins/${e(id)}`,
   DELETE: (id: string) => `/admin/admins/${e(id)}`,
