@@ -34,6 +34,27 @@ export class OrbitNestClient {
   private accessToken: string;
 
   constructor(config: OrbitNestClientConfig) {
+    // LOW-02: the admin bearer token rides on every request. Refuse cleartext
+    // http to a non-loopback host (it would expose the token to anyone on the
+    // network path) and warn on a non-default API host.
+    try {
+      const u = new URL(config.apiUrl);
+      const isLoopback = ['localhost', '127.0.0.1', '::1'].includes(u.hostname);
+      if (u.protocol !== 'https:' && !isLoopback) {
+        throw new ApiError(
+          `Refusing to use an insecure API URL: ${config.apiUrl}. The admin token would be sent in cleartext — use https:// (http is only allowed for localhost).`,
+          0,
+        );
+      }
+      if (u.protocol !== 'https:') {
+        logger.warn(`Using cleartext http API URL (loopback dev only): ${config.apiUrl}`);
+      } else if (u.hostname !== 'api.orbitnest.io') {
+        logger.warn(`Using a non-default OrbitNest API host: ${u.hostname}`);
+      }
+    } catch (err) {
+      if (err instanceof ApiError) throw err;
+      throw new ApiError(`Invalid ORBITNEST_API_URL: ${config.apiUrl}`, 0);
+    }
     this.baseUrl = `${config.apiUrl}/api`;
     this.accessToken = config.accessToken;
   }
