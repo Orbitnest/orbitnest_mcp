@@ -3,3 +3,6 @@ dist/
 .env
 *.js.map
 .DS_Store
+
+# Internal docs — never publish (PRD, implementation notes, security audits)
+docs/
