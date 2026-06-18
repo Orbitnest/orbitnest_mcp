@@ -282,6 +282,40 @@ export class OrbitNestClient {
     return this.request<Record<string, unknown>>('GET', EP.PROJECTS.API_KEYS_LIST(projectId));
   }
 
+  // ─── Admin integrations (webhooks, SMS/Twilio, connection string) ───
+
+  async getConnectionString(projectId: string) {
+    return this.request<Record<string, unknown>>('GET', EP.ADMIN_INTEGRATIONS.CONNECTION(projectId));
+  }
+
+  async listWebhooks(projectId: string) {
+    return this.request<Record<string, unknown>>('GET', EP.ADMIN_INTEGRATIONS.WEBHOOKS(projectId));
+  }
+
+  async createWebhook(projectId: string, body: Record<string, unknown>) {
+    return this.request<Record<string, unknown>>('POST', EP.ADMIN_INTEGRATIONS.WEBHOOKS(projectId), body);
+  }
+
+  async deleteWebhook(projectId: string, webhookId: string) {
+    return this.request<Record<string, unknown>>('DELETE', EP.ADMIN_INTEGRATIONS.WEBHOOK(projectId, webhookId));
+  }
+
+  async testWebhook(projectId: string, webhookId: string) {
+    return this.request<Record<string, unknown>>('POST', EP.ADMIN_INTEGRATIONS.WEBHOOK_TEST(projectId, webhookId));
+  }
+
+  async getSmsConfig(projectId: string) {
+    return this.request<Record<string, unknown>>('GET', EP.ADMIN_INTEGRATIONS.SMS_CONFIG(projectId));
+  }
+
+  async updateSmsConfig(projectId: string, body: Record<string, unknown>) {
+    return this.request<Record<string, unknown>>('PUT', EP.ADMIN_INTEGRATIONS.SMS_CONFIG(projectId), body);
+  }
+
+  async testSms(projectId: string, to: string) {
+    return this.request<Record<string, unknown>>('POST', EP.ADMIN_INTEGRATIONS.SMS_TEST(projectId), { to });
+  }
+
   // ─── Database ───
 
   async executeSql(projectId: string, sql: string, params?: unknown[]) {

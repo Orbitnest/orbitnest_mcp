@@ -332,6 +332,19 @@ All subsequent tools automatically use the active project — you rarely need to
 | `orbitnest_delete_smtp_settings` | Remove SMTP configuration |
 | `orbitnest_test_smtp_connection` | Test SMTP connectivity |
 
+### Integrations (9 tools)
+| Tool | Description |
+|------|-------------|
+| `orbitnest_get_connection_string` | Get the direct Postgres connection string (when enabled) |
+| `orbitnest_list_webhooks` | List database webhooks |
+| `orbitnest_create_webhook` | Create a signed row-change webhook |
+| `orbitnest_delete_webhook` | Delete a webhook |
+| `orbitnest_test_webhook` | Send a test event to a webhook |
+| `orbitnest_get_sms_config` | Get the project's Twilio/SMS config |
+| `orbitnest_set_sms_config` | Configure Twilio (auth token stored encrypted) |
+| `orbitnest_test_sms` | Send a test SMS |
+| `orbitnest_enable_extension` | Enable a Postgres extension (e.g. `vector` for pgvector) |
+
 ### Dashboard (2 tools)
 | Tool | Description |
 |------|-------------|

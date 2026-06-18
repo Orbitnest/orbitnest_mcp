@@ -63,6 +63,16 @@ export const ADMIN_STORAGE = {
   DELETE_BUCKET: (id: string, bucket: string) => `/admin/projects/${e(id)}/storage/buckets/${e(bucket)}`,
 } as const;
 
+// Admin integrations (webhooks, SMS/Twilio config, direct connection string)
+export const ADMIN_INTEGRATIONS = {
+  CONNECTION: (id: string) => `/admin/projects/${e(id)}/connection`,
+  WEBHOOKS: (id: string) => `/admin/projects/${e(id)}/webhooks`,
+  WEBHOOK: (id: string, wid: string) => `/admin/projects/${e(id)}/webhooks/${e(wid)}`,
+  WEBHOOK_TEST: (id: string, wid: string) => `/admin/projects/${e(id)}/webhooks/${e(wid)}/test`,
+  SMS_CONFIG: (id: string) => `/admin/projects/${e(id)}/sms-config`,
+  SMS_TEST: (id: string) => `/admin/projects/${e(id)}/sms-config/test`,
+} as const;
+
 // Projects
 export const PROJECTS = {
   CREATE: '/projects',
