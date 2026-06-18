@@ -28,6 +28,7 @@ import { registerDashboardTools } from './dashboard.tools.js';
 import { registerBackgroundJobsTools } from './background-jobs.tools.js';
 import { registerRealtimeTools } from './realtime.tools.js';
 import { registerAnalyticsTools } from './analytics.tools.js';
+import { registerMigrationTools } from './migration.tools.js';
 
 export function registerAllTools(server: McpServer, ctx: ToolContext): void {
   registerAuthTools(server, ctx);
@@ -43,4 +44,5 @@ export function registerAllTools(server: McpServer, ctx: ToolContext): void {
   registerDashboardTools(server, ctx);
   registerRealtimeTools(server, ctx);
   registerAnalyticsTools(server, ctx);
+  registerMigrationTools(server, ctx);
 }

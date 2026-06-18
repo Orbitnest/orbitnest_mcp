@@ -284,8 +284,9 @@ export class OrbitNestClient {
 
   // ─── Database ───
 
-  async executeSql(projectId: string, sql: string) {
-    return this.request<Record<string, unknown>>('POST', EP.DATABASE.SQL(projectId), { sql });
+  async executeSql(projectId: string, sql: string, params?: unknown[]) {
+    const body = params && params.length > 0 ? { sql, params } : { sql };
+    return this.request<Record<string, unknown>>('POST', EP.DATABASE.SQL(projectId), body);
   }
 
   async getTableMetadata(projectId: string, tableName?: string) {
