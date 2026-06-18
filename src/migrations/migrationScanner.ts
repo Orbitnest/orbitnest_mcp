@@ -4,6 +4,15 @@ import { createHash } from 'crypto';
 import { MigrationError, type MigrationFile } from './types.js';
 
 const MIGRATION_FILE_RE = /^(\d+)[_-](.+)\.sql$/i;
+const DOWN_MARKER_RE = /^\s*--+\s*(migrate:)?down\b.*$/i;
+
+/** Split a migration into up (forward) and down (rollback) SQL. */
+function splitUpDown(content: string): { up: string; down: string } {
+  const lines = content.split(/\r?\n/);
+  const idx = lines.findIndex((l) => DOWN_MARKER_RE.test(l));
+  if (idx === -1) return { up: content, down: '' };
+  return { up: lines.slice(0, idx).join('\n'), down: lines.slice(idx + 1).join('\n') };
+}
 
 /** Discovers and orders migration files on disk; computes content checksums. */
 export class MigrationScanner {
@@ -52,11 +61,14 @@ export class MigrationScanner {
     if (!match) return null;
     const path = join(this.dir, filename);
     const content = readFileSync(path, 'utf8');
+    const { up, down } = splitUpDown(content);
     return {
       migrationId: match[1],
       name: filename,
       path,
       content,
+      up,
+      down,
       checksum: createHash('sha256').update(content, 'utf8').digest('hex'),
     };
   }

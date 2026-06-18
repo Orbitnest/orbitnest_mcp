@@ -12,8 +12,12 @@ export interface MigrationFile {
   name: string;
   /** Absolute path on disk. */
   path: string;
-  /** Raw SQL contents. */
+  /** Raw SQL contents (the whole file). */
   content: string;
+  /** Forward SQL (before `-- migrate:down`, or the whole file). */
+  up: string;
+  /** Rollback SQL (after `-- migrate:down`), or "" when none. */
+  down: string;
   /** SHA-256 (hex) of the contents. */
   checksum: string;
 }

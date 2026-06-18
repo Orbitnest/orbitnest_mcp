@@ -9,7 +9,8 @@ export class MigrationExecutor {
   constructor(private readonly sql: MigrationSqlClient) {}
 
   async execute(file: MigrationFile): Promise<void> {
-    const body = file.content.trim();
+    // Run only the forward (up) section — never the rollback.
+    const body = file.up.trim();
     if (!body) return;
 
     const terminated = body.endsWith(';') ? body : `${body};`;
