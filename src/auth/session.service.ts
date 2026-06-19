@@ -32,17 +32,32 @@ export class SessionService {
 
   async initialize(): Promise<void> {
     const credentials = loadCredentials();
-    if (credentials) {
-      this.session.accessToken = credentials.access_token;
-      this.session.refreshToken = credentials.refresh_token;
-      this.session.tokenExpiresAt = new Date(credentials.expires_at);
-      this.session.userId = credentials.user.id;
-      this.session.email = credentials.user.email;
-      this.apiClient.setAccessToken(credentials.access_token);
-      logger.info('Session initialized from stored credentials', { email: credentials.user.email });
-    } else {
+    if (!credentials || !credentials.access_token) {
       logger.info('No stored credentials found. Sign in required.');
+      return;
     }
+
+    this.session.accessToken = credentials.access_token;
+    this.session.refreshToken = credentials.refresh_token ?? null;
+    this.session.tokenExpiresAt = credentials.expires_at
+      ? new Date(credentials.expires_at)
+      : getTokenExpiry(credentials.access_token);
+
+    // Older / partial credential files may not carry a `user` object. Falling
+    // back to the JWT payload here keeps a legacy file from crashing the whole
+    // server on startup — which previously dropped every tool from the client.
+    let userId = credentials.user?.id ?? null;
+    let email = credentials.user?.email ?? null;
+    if (!userId || !email) {
+      const payload = decodeTokenPayload(credentials.access_token);
+      userId = userId ?? ((payload?.sub as string | undefined) ?? null);
+      email = email ?? ((payload?.email as string | undefined) ?? null);
+    }
+    this.session.userId = userId;
+    this.session.email = email;
+
+    this.apiClient.setAccessToken(credentials.access_token);
+    logger.info('Session initialized from stored credentials', { email: email ?? '(unknown)' });
   }
 
   getSession(): McpSession {

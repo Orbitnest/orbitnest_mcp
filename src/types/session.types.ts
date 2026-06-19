@@ -92,7 +92,9 @@ export interface StoredCredentials {
   access_token: string;
   refresh_token: string;
   expires_at: string;
-  user: {
+  // Optional: legacy credential files (pre-`user` field) omit this. Readers
+  // must tolerate its absence and fall back to the JWT payload.
+  user?: {
     id: string;
     email: string;
   };
