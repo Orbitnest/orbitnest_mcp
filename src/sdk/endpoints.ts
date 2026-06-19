@@ -19,6 +19,7 @@ const ep = (p: string): string =>
 // Authentication
 export const AUTH = {
   SIGNIN: '/auth/signin',
+  SIGNIN_MFA: '/auth/signin/mfa',
   SIGNUP: '/auth/signup',
   SIGNUP_WITH_VERIFICATION: '/auth/signup-with-verification',
   REQUEST_VERIFICATION: '/auth/request-verification',

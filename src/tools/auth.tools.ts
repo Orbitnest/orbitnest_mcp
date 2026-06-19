@@ -9,11 +9,28 @@ export function registerAuthTools(server: McpServer, ctx: ToolContext): void {
 
   // ─── Admin Sign In ───
   server.registerTool('orbitnest_admin_signin', {
-    description: 'Sign in as an OrbitNest admin user. Returns JWT tokens and saves credentials for subsequent requests.',
-    inputSchema: { email: z.string().email(), password: z.string().min(1) },
-  }, async ({ email, password }) => {
+    description:
+      'Sign in as an OrbitNest admin user. Returns JWT tokens and saves credentials for subsequent requests. ' +
+      'If the account has two-factor (TOTP) enabled, call again with the same email/password plus `mfa_code` ' +
+      'set to a 6-digit authenticator code (or a recovery code).',
+    inputSchema: {
+      email: z.string().email(),
+      password: z.string().min(1),
+      mfa_code: z.string().optional().describe('6-digit authenticator code or a recovery code (only if 2FA is enabled)'),
+    },
+  }, async ({ email, password, mfa_code }) => {
     try {
-      const result = await ctx.apiClient.signin(email, password);
+      const result = await ctx.apiClient.signin(email, password, mfa_code);
+      // MFA enabled but no code supplied — ask for one rather than failing.
+      if (result?.mfa_required && !result.access_token) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({
+            success: false,
+            mfa_required: true,
+            message: 'This account has two-factor authentication enabled. Call orbitnest_admin_signin again with the same email and password, plus mfa_code set to your 6-digit authenticator code (or a recovery code).',
+          }, null, 2) }],
+        };
+      }
       ctx.session.setAuthFromSignin(result);
       return {
         content: [{ type: 'text' as const, text: JSON.stringify({

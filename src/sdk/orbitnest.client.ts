@@ -158,8 +158,22 @@ export class OrbitNestClient {
 
   // ─── Authentication ───
 
-  async signin(email: string, password: string) {
-    return this.request<Record<string, unknown>>('POST', EP.AUTH.SIGNIN, { email, password }, { noAuth: true });
+  async signin(email: string, password: string, mfaCode?: string) {
+    const res = await this.request<Record<string, unknown>>('POST', EP.AUTH.SIGNIN, { email, password }, { noAuth: true });
+    // MFA step-up: when the admin has two-factor enabled, signin returns a
+    // short-lived challenge instead of tokens. If a code was supplied, complete
+    // it here and return real tokens; otherwise hand the challenge back so the
+    // tool can ask the user for a code.
+    if (res?.mfa_required) {
+      if (!mfaCode) return res;
+      return this.request<Record<string, unknown>>(
+        'POST',
+        EP.AUTH.SIGNIN_MFA,
+        { challenge_token: res.challenge_token, code: mfaCode },
+        { noAuth: true },
+      );
+    }
+    return res;
   }
 
   async signup(email: string, password: string, name?: string) {
