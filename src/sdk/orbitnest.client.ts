@@ -835,4 +835,67 @@ export class OrbitNestClient {
   async revokeAnalyticsToken(projectId: string, tokenId: string) {
     return this.request<Record<string, unknown>>('DELETE', EP.ANALYTICS.TOKEN(projectId, tokenId));
   }
+
+  // ── Project Intelligence ──────────────────────────────────────────────────
+
+  async getProjectContext(projectId: string, opts?: { includeSchema?: boolean; events?: number; tasks?: number }) {
+    const query: Record<string, string> = {};
+    if (opts?.includeSchema) query['includeSchema'] = 'true';
+    if (opts?.events) query['events'] = String(opts.events);
+    if (opts?.tasks) query['tasks'] = String(opts.tasks);
+    return this.request<Record<string, unknown>>('GET', EP.INTELLIGENCE.CONTEXT(projectId), undefined, { query });
+  }
+
+  async getRecentChanges(projectId: string, opts?: { since?: string; limit?: number }) {
+    const query: Record<string, string> = {};
+    if (opts?.since) query['since'] = opts.since;
+    if (opts?.limit) query['limit'] = String(opts.limit);
+    return this.request<unknown[]>('GET', EP.INTELLIGENCE.CHANGES(projectId), undefined, { query });
+  }
+
+  async getOpenTasks(projectId: string, opts?: { status?: string; priority?: string }) {
+    const query: Record<string, string> = {};
+    if (opts?.status) query['status'] = opts.status;
+    if (opts?.priority) query['priority'] = opts.priority;
+    return this.request<unknown[]>('GET', EP.INTELLIGENCE.TASKS(projectId), undefined, { query });
+  }
+
+  async getProjectDecisions(projectId: string, opts?: { status?: string; limit?: number }) {
+    const query: Record<string, string> = {};
+    if (opts?.status) query['status'] = opts.status;
+    if (opts?.limit) query['limit'] = String(opts.limit);
+    return this.request<unknown[]>('GET', EP.INTELLIGENCE.DECISIONS(projectId), undefined, { query });
+  }
+
+  async addDecision(projectId: string, data: { decision: string; reason?: string; metadata?: Record<string, unknown> }) {
+    return this.request<Record<string, unknown>>('POST', EP.INTELLIGENCE.DECISIONS(projectId), data);
+  }
+
+  async addTask(projectId: string, data: { title: string; detail?: string; priority?: string; linkedFeatureId?: string }) {
+    return this.request<Record<string, unknown>>('POST', EP.INTELLIGENCE.TASKS(projectId), data);
+  }
+
+  async completeTask(projectId: string, taskId: string, data?: { note?: string }) {
+    return this.request<Record<string, unknown>>('PATCH', EP.INTELLIGENCE.COMPLETE_TASK(projectId, taskId), data ?? {});
+  }
+
+  async addFeature(projectId: string, data: { name: string; description?: string; status?: string; dependencies?: string[] }) {
+    return this.request<Record<string, unknown>>('POST', EP.INTELLIGENCE.FEATURES(projectId), data);
+  }
+
+  async updateFeature(projectId: string, featureId: string, data: { status?: string; description?: string }) {
+    return this.request<Record<string, unknown>>('PATCH', EP.INTELLIGENCE.FEATURE(projectId, featureId), data);
+  }
+
+  async addEvent(projectId: string, data: { type: string; summary: string; metadata?: Record<string, unknown> }) {
+    return this.request<Record<string, unknown>>('POST', EP.INTELLIGENCE.EVENTS(projectId), data);
+  }
+
+  async searchProjectMemory(projectId: string, data: { query: string; sourceType?: string; limit?: number; minScore?: number }) {
+    return this.request<unknown[]>('POST', EP.INTELLIGENCE.SEARCH(projectId), data);
+  }
+
+  async setProjectProfile(projectId: string, data: { summary?: string; stack?: string[]; conventions?: Record<string, unknown>; digest?: string }) {
+    return this.request<Record<string, unknown>>('PUT', EP.INTELLIGENCE.PROFILE(projectId), data);
+  }
 }

@@ -204,3 +204,17 @@ export const ANALYTICS = {
   TOKENS: (id: string) => `/analytics/projects/${e(id)}/tokens`,
   TOKEN: (id: string, tokenId: string) => `/analytics/projects/${e(id)}/tokens/${e(tokenId)}`,
 } as const;
+
+// Project Intelligence
+export const INTELLIGENCE = {
+  CONTEXT:       (p: string) => `/projects/${e(p)}/intelligence/context`,
+  CHANGES:       (p: string) => `/projects/${e(p)}/intelligence/changes`,
+  TASKS:         (p: string) => `/projects/${e(p)}/intelligence/tasks`,
+  DECISIONS:     (p: string) => `/projects/${e(p)}/intelligence/decisions`,
+  COMPLETE_TASK: (p: string, t: string) => `/projects/${e(p)}/intelligence/tasks/${e(t)}/complete`,
+  FEATURES:      (p: string) => `/projects/${e(p)}/intelligence/features`,
+  FEATURE:       (p: string, f: string) => `/projects/${e(p)}/intelligence/features/${e(f)}`,
+  EVENTS:        (p: string) => `/projects/${e(p)}/intelligence/events`,
+  SEARCH:        (p: string) => `/projects/${e(p)}/intelligence/search`,
+  PROFILE:       (p: string) => `/projects/${e(p)}/intelligence/profile`,
+} as const;

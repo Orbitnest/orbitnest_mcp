@@ -36,11 +36,31 @@ export async function createServer(config: AppConfig): Promise<McpServer> {
     }
   }
 
+  const SESSION_INSTRUCTIONS = [
+    'You are an AI assistant with persistent memory for OrbitNest projects.',
+    '',
+    'SESSION-START PROTOCOL (mandatory):',
+    '1. If no project is active, call orbitnest_list_projects and orbitnest_set_active_project.',
+    '2. Call orbitnest_get_project_context (or use the prompt: orbitnest_load_project) to load the full project state: profile, stack, open tasks, decisions, features, and recent events.',
+    '3. Review open tasks and the latest digest so you understand where the project is.',
+    '',
+    'DURING THE SESSION:',
+    '- When you make a significant architectural or product decision, call orbitnest_add_decision immediately.',
+    '- When you identify a follow-up action item, call orbitnest_add_task.',
+    '- When something notable happens (deploy, bug found, milestone reached), call orbitnest_add_event.',
+    '- Use orbitnest_search_memory when you need to recall past context not in the snapshot.',
+    '',
+    'SESSION-END PROTOCOL (mandatory):',
+    '- Call orbitnest_set_project_profile with a `digest` summarising: what was accomplished, key decisions made, blockers, and what should happen next session.',
+    '',
+    'Never skip the session-start context load. The project memory is only useful if it is read at the start and written at the end.',
+  ].join('\n');
+
   // Create MCP server
-  const server = new McpServer({
-    name: config.serverName,
-    version: config.serverVersion,
-  });
+  const server = new McpServer(
+    { name: config.serverName, version: config.serverVersion },
+    { instructions: SESSION_INSTRUCTIONS },
+  );
 
   // Build tool context
   const toolContext: ToolContext = {
