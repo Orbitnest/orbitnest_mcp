@@ -4,6 +4,7 @@ import { OrbitNestClient } from '../sdk/orbitnest.client.js';
 import { SchemaService } from '../context/schema.service.js';
 import { WorkspaceService } from '../context/workspace.service.js';
 import { ProjectService } from '../context/project.service.js';
+import { SessionTracker } from '../context/session-tracker.js';
 import type { AppConfig } from '../types/config.types.js';
 
 export interface ToolContext {
@@ -13,6 +14,7 @@ export interface ToolContext {
   workspaceService: WorkspaceService;
   projectService: ProjectService;
   config: AppConfig;
+  tracker: SessionTracker;
 }
 
 import { registerAuthTools } from './auth.tools.js';

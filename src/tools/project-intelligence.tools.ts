@@ -5,12 +5,20 @@ import { formatErrorResponse } from '../utils/errors.js';
 import { requireProjectId } from '../utils/validators.js';
 
 export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolContext): void {
+  const { tracker } = ctx;
 
-  // ─── Get Project Context ───
+  // ─── Get Project Context ──────────────────────────────────────────────────
+  // Keywords: load memory, load context, sync memory, project state, orientation
   server.registerTool('orbitnest_get_project_context', {
-    description:
-      'Load the full project intelligence context: summary, stack, conventions, digest, open tasks, active decisions, and feature roadmap. ' +
-      'Call this at the start of every work session to orient yourself to the project state.',
+    description: [
+      'Load (or refresh) the full project memory and context.',
+      'Returns: project profile, tech stack, conventions, agent digest, open tasks, active decisions, feature roadmap, and recent events.',
+      '',
+      'WHEN TO CALL: Automatically at session start — before taking any action on the project.',
+      'If a PROJECT CONTEXT block is already present in your instructions, it was pre-loaded at server start; call this only to refresh it.',
+      '',
+      'Keywords: load memory, load context, refresh context, sync memory, project state, orient, catch up, what is the project, what was done.',
+    ].join('\n'),
     inputSchema: {
       projectId: z.string().uuid().optional().describe('Project ID (uses active project if omitted)'),
       includeSchema: z.boolean().optional().describe('Also return the DB schema alongside the context'),
@@ -20,22 +28,122 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
     try {
       await ctx.session.ensureAuthenticated();
       const pid = requireProjectId(projectId, ctx.session.getSession().currentProjectId);
-      const result = await ctx.apiClient.getProjectContext(pid, {
-        includeSchema, events: eventLimit,
-      });
-      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+      tracker.setProject(pid);
+      const result = await ctx.apiClient.getProjectContext(pid, { includeSchema, events: eventLimit });
+      return {
+        content: [{
+          type: 'text' as const,
+          text: [
+            JSON.stringify(result, null, 2),
+            '',
+            '─── NEXT STEPS ───',
+            '• Review open tasks and the latest digest.',
+            '• At session end, call orbitnest_sync_memory to save your work.',
+          ].join('\n'),
+        }],
+      };
     } catch (error) {
       return formatErrorResponse(error);
     }
   });
 
-  // ─── Get Recent Changes ───
+  // ─── Sync Memory (one-call session-end) ───────────────────────────────────
+  // Keywords: save memory, sync memory, persist memory, end session, write back,
+  //           update project memory, commit session, session digest
+  server.registerTool('orbitnest_sync_memory', {
+    description: [
+      'ONE-CALL SESSION-END MEMORY SYNC. Save everything to the project memory in a single call.',
+      '',
+      'Pass:',
+      '  • digest   — what was accomplished, decisions made, blockers, what comes next',
+      '  • decisions — list of decisions made this session (if not already written via add_decision)',
+      '  • tasks     — list of follow-up items (if not already written via add_task)',
+      '  • events    — notable events: deploys, bugs, milestones (if not already written via add_event)',
+      '',
+      'All items are written in parallel. No need to call add_task / add_decision / add_event separately.',
+      '',
+      'WHEN TO CALL: At the end of EVERY session, before the conversation closes.',
+      'Also call it proactively if the user asks to "save", "sync", "persist", or "commit" memory.',
+      '',
+      'Keywords: save memory, sync memory, persist context, commit session, end session, write back, update project memory.',
+    ].join('\n'),
+    inputSchema: {
+      projectId: z.string().uuid().optional(),
+      digest: z.string().min(1).max(3000).describe(
+        'Session summary: what was accomplished, key decisions, blockers, and what should happen next session.',
+      ),
+      decisions: z.array(z.object({
+        decision: z.string().min(1).max(500).describe('The decision, in one sentence'),
+        reason:   z.string().max(2000).optional().describe('Why this decision was made'),
+      })).optional().describe('Decisions made this session not yet written via orbitnest_add_decision'),
+      tasks: z.array(z.object({
+        title:    z.string().min(1).max(200),
+        detail:   z.string().max(2000).optional(),
+        priority: z.enum(['urgent', 'high', 'medium', 'low']).optional(),
+      })).optional().describe('Follow-up tasks identified this session not yet written via orbitnest_add_task'),
+      events: z.array(z.object({
+        type:    z.enum(['deploy', 'bug', 'decision', 'update', 'milestone', 'incident', 'other']),
+        summary: z.string().min(1).max(500),
+      })).optional().describe('Notable events not yet written via orbitnest_add_event'),
+    },
+  }, async ({ projectId, digest, decisions, tasks, events }) => {
+    try {
+      await ctx.session.ensureAuthenticated();
+      const pid = requireProjectId(projectId, ctx.session.getSession().currentProjectId);
+      tracker.setProject(pid);
+
+      const writes: Promise<unknown>[] = [];
+
+      // Write profile/digest
+      writes.push(ctx.apiClient.setProjectProfile(pid, { digest }));
+
+      // Write decisions in parallel
+      for (const d of decisions ?? []) {
+        writes.push(ctx.apiClient.addDecision(pid, d));
+        tracker.record({ kind: 'decision', summary: d.decision });
+      }
+
+      // Write tasks in parallel
+      for (const t of tasks ?? []) {
+        writes.push(ctx.apiClient.addTask(pid, t));
+        tracker.record({ kind: 'task', summary: t.title });
+      }
+
+      // Write events in parallel
+      for (const e of events ?? []) {
+        writes.push(ctx.apiClient.addEvent(pid, e));
+        tracker.record({ kind: 'event', summary: `[${e.type}] ${e.summary}` });
+      }
+
+      const results = await Promise.allSettled(writes);
+      const failed = results.filter((r) => r.status === 'rejected').length;
+
+      tracker.markSynced();
+
+      const summary = [
+        `✓ Session memory synced.`,
+        `  Digest written.`,
+        decisions?.length ? `  Decisions: ${decisions.length} written.` : '',
+        tasks?.length    ? `  Tasks: ${tasks.length} written.`          : '',
+        events?.length   ? `  Events: ${events.length} written.`        : '',
+        failed > 0 ? `  ⚠ ${failed} item(s) failed to write — check logs.` : '',
+      ].filter(Boolean).join('\n');
+
+      return { content: [{ type: 'text' as const, text: summary }] };
+    } catch (error) {
+      return formatErrorResponse(error);
+    }
+  });
+
+  // ─── Get Recent Changes ───────────────────────────────────────────────────
   server.registerTool('orbitnest_get_recent_changes', {
-    description: 'Get recent project events since a given timestamp. Use to catch up on what changed since your last session.',
+    description:
+      'Get recent project events since a given timestamp. ' +
+      'Use to catch up on what changed since your last session, or to see what happened while you were away.',
     inputSchema: {
       projectId: z.string().uuid().optional(),
       since: z.string().optional().describe('ISO 8601 timestamp — only return events after this point'),
-      limit: z.number().int().min(1).max(100).optional(),
+      limit:  z.number().int().min(1).max(100).optional(),
     },
   }, async ({ projectId, since, limit }) => {
     try {
@@ -48,9 +156,9 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
     }
   });
 
-  // ─── Get Open Tasks ───
+  // ─── Get Open Tasks ───────────────────────────────────────────────────────
   server.registerTool('orbitnest_get_open_tasks', {
-    description: 'Get open tasks (todo + in_progress) for the project, sorted by priority.',
+    description: 'Get open tasks (todo + in_progress) for the project, sorted by priority. Use to see what work is pending.',
     inputSchema: {
       projectId: z.string().uuid().optional(),
       priority: z.enum(['urgent', 'high', 'medium', 'low']).optional().describe('Filter by priority'),
@@ -66,53 +174,62 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
     }
   });
 
-  // ─── Add Task ───
+  // ─── Add Task ─────────────────────────────────────────────────────────────
   server.registerTool('orbitnest_add_task', {
-    description: 'Add a task to the project memory. The AI agent should call this when identifying a follow-up action item during a work session.',
+    description:
+      'Record a follow-up task or action item in the project memory. ' +
+      'Call this IMMEDIATELY when you identify a TODO — do not wait until session end. ' +
+      'Prefer orbitnest_sync_memory at session end to batch-write multiple tasks at once.',
     inputSchema: {
-      projectId: z.string().uuid().optional(),
-      title: z.string().min(1).max(200),
-      detail: z.string().max(2000).optional(),
-      priority: z.enum(['urgent', 'high', 'medium', 'low']).optional(),
+      projectId:       z.string().uuid().optional(),
+      title:           z.string().min(1).max(200),
+      detail:          z.string().max(2000).optional(),
+      priority:        z.enum(['urgent', 'high', 'medium', 'low']).optional(),
       linkedFeatureId: z.string().uuid().optional(),
     },
   }, async ({ projectId, title, detail, priority, linkedFeatureId }) => {
     try {
       await ctx.session.ensureAuthenticated();
       const pid = requireProjectId(projectId, ctx.session.getSession().currentProjectId);
+      tracker.setProject(pid);
       const result = await ctx.apiClient.addTask(pid, { title, detail, priority, linkedFeatureId });
-      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+      tracker.record({ kind: 'task', summary: title });
+      const footer = tracker.reminderFooter() ?? '';
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) + footer }] };
     } catch (error) {
       return formatErrorResponse(error);
     }
   });
 
-  // ─── Complete Task ───
+  // ─── Complete Task ────────────────────────────────────────────────────────
   server.registerTool('orbitnest_complete_task', {
     description: 'Mark a task as done. Optionally add a completion note.',
     inputSchema: {
       projectId: z.string().uuid().optional(),
-      taskId: z.string().uuid(),
-      note: z.string().max(500).optional(),
+      taskId:    z.string().uuid(),
+      note:      z.string().max(500).optional(),
     },
   }, async ({ projectId, taskId, note }) => {
     try {
       await ctx.session.ensureAuthenticated();
       const pid = requireProjectId(projectId, ctx.session.getSession().currentProjectId);
       const result = await ctx.apiClient.completeTask(pid, taskId, { note });
+      tracker.record({ kind: 'complete', summary: `task ${taskId}` });
       return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
     } catch (error) {
       return formatErrorResponse(error);
     }
   });
 
-  // ─── Get Decisions ───
+  // ─── Get Decisions ────────────────────────────────────────────────────────
   server.registerTool('orbitnest_get_decisions', {
-    description: 'Retrieve the active architectural or product decisions for the project. Reference these before making design choices.',
+    description:
+      'Retrieve stored architectural and product decisions. ' +
+      'Always reference these before making design choices to avoid contradicting past decisions.',
     inputSchema: {
       projectId: z.string().uuid().optional(),
-      status: z.enum(['active', 'superseded', 'all']).optional(),
-      limit: z.number().int().min(1).max(100).optional(),
+      status:    z.enum(['active', 'superseded', 'all']).optional(),
+      limit:     z.number().int().min(1).max(100).optional(),
     },
   }, async ({ projectId, status, limit }) => {
     try {
@@ -125,56 +242,62 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
     }
   });
 
-  // ─── Add Decision ───
+  // ─── Add Decision ─────────────────────────────────────────────────────────
   server.registerTool('orbitnest_add_decision', {
     description:
       'Record an architectural or product decision in the project memory. ' +
-      'Call this whenever you make a significant technical choice (e.g. "use JWT over sessions", "adopt REST over GraphQL").',
+      'Call this IMMEDIATELY when a significant technical choice is made (e.g. "use JWT over sessions", "adopt REST over GraphQL"). ' +
+      'Prefer orbitnest_sync_memory at session end to batch-write multiple decisions at once.',
     inputSchema: {
       projectId: z.string().uuid().optional(),
-      decision: z.string().min(1).max(500).describe('The decision made, in one sentence'),
-      reason: z.string().max(2000).optional().describe('Why this decision was made'),
-      metadata: z.record(z.unknown()).optional(),
+      decision:  z.string().min(1).max(500).describe('The decision, in one sentence'),
+      reason:    z.string().max(2000).optional().describe('Why this decision was made'),
+      metadata:  z.record(z.unknown()).optional(),
     },
   }, async ({ projectId, decision, reason, metadata }) => {
     try {
       await ctx.session.ensureAuthenticated();
       const pid = requireProjectId(projectId, ctx.session.getSession().currentProjectId);
+      tracker.setProject(pid);
       const result = await ctx.apiClient.addDecision(pid, { decision, reason, metadata: metadata as Record<string, unknown> | undefined });
-      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+      tracker.record({ kind: 'decision', summary: decision });
+      const footer = tracker.reminderFooter() ?? '';
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) + footer }] };
     } catch (error) {
       return formatErrorResponse(error);
     }
   });
 
-  // ─── Add Feature ───
+  // ─── Add Feature ──────────────────────────────────────────────────────────
   server.registerTool('orbitnest_add_feature', {
-    description: 'Add a feature to the project roadmap memory.',
+    description: 'Add a feature to the project roadmap. Use when a new feature is identified or planned.',
     inputSchema: {
-      projectId: z.string().uuid().optional(),
-      name: z.string().min(1).max(200),
-      description: z.string().max(2000).optional(),
-      status: z.enum(['planned', 'in_progress', 'released', 'cancelled']).optional(),
+      projectId:    z.string().uuid().optional(),
+      name:         z.string().min(1).max(200),
+      description:  z.string().max(2000).optional(),
+      status:       z.enum(['planned', 'in_progress', 'released', 'cancelled']).optional(),
       dependencies: z.array(z.string()).optional(),
     },
   }, async ({ projectId, name, description, status, dependencies }) => {
     try {
       await ctx.session.ensureAuthenticated();
       const pid = requireProjectId(projectId, ctx.session.getSession().currentProjectId);
+      tracker.setProject(pid);
       const result = await ctx.apiClient.addFeature(pid, { name, description, status, dependencies });
+      tracker.record({ kind: 'task', summary: `[feature] ${name}` });
       return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
     } catch (error) {
       return formatErrorResponse(error);
     }
   });
 
-  // ─── Update Feature ───
+  // ─── Update Feature ───────────────────────────────────────────────────────
   server.registerTool('orbitnest_update_feature', {
-    description: 'Update a feature status or description (e.g. move from in_progress → released after shipping).',
+    description: 'Update a feature status or description (e.g. move in_progress → released after shipping).',
     inputSchema: {
-      projectId: z.string().uuid().optional(),
-      featureId: z.string().uuid(),
-      status: z.enum(['planned', 'in_progress', 'released', 'cancelled']).optional(),
+      projectId:   z.string().uuid().optional(),
+      featureId:   z.string().uuid(),
+      status:      z.enum(['planned', 'in_progress', 'released', 'cancelled']).optional(),
       description: z.string().max(2000).optional(),
     },
   }, async ({ projectId, featureId, status, description }) => {
@@ -188,38 +311,44 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
     }
   });
 
-  // ─── Add Event ───
+  // ─── Add Event ────────────────────────────────────────────────────────────
   server.registerTool('orbitnest_add_event', {
     description:
-      'Record a significant project event in the timeline (deploy, bug fix, design change, external dependency update, etc.). ' +
-      'This builds the project\'s historical context for future sessions.',
+      'Record a significant project event in the timeline (deploy, bug, milestone, incident, etc.). ' +
+      'Call IMMEDIATELY when something notable happens — not at session end. ' +
+      'This builds the historical context that future sessions read. ' +
+      'Prefer orbitnest_sync_memory to batch-write multiple events at session end.',
     inputSchema: {
       projectId: z.string().uuid().optional(),
-      type: z.enum(['deploy', 'bug', 'decision', 'update', 'milestone', 'incident', 'other']),
-      summary: z.string().min(1).max(500),
-      metadata: z.record(z.unknown()).optional(),
+      type:      z.enum(['deploy', 'bug', 'decision', 'update', 'milestone', 'incident', 'other']),
+      summary:   z.string().min(1).max(500),
+      metadata:  z.record(z.unknown()).optional(),
     },
   }, async ({ projectId, type, summary, metadata }) => {
     try {
       await ctx.session.ensureAuthenticated();
       const pid = requireProjectId(projectId, ctx.session.getSession().currentProjectId);
+      tracker.setProject(pid);
       const result = await ctx.apiClient.addEvent(pid, { type, summary, metadata: metadata as Record<string, unknown> | undefined });
-      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+      tracker.record({ kind: 'event', summary: `[${type}] ${summary}` });
+      const footer = tracker.reminderFooter() ?? '';
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) + footer }] };
     } catch (error) {
       return formatErrorResponse(error);
     }
   });
 
-  // ─── Search Memory ───
+  // ─── Search Memory ────────────────────────────────────────────────────────
   server.registerTool('orbitnest_search_memory', {
     description:
-      'Semantic search over the project intelligence memory. ' +
-      'Use when you need to recall a past decision, task, feature, or event that isn\'t surfaced in get_project_context.',
+      'Semantic search over ALL project memory — decisions, tasks, features, events, and summaries. ' +
+      'Use when you need to recall something not surfaced in the context snapshot. ' +
+      'Keywords: search memory, recall, find past decision, look up, what did we decide about, history.',
     inputSchema: {
-      projectId: z.string().uuid().optional(),
-      query: z.string().min(1).max(500),
+      projectId:  z.string().uuid().optional(),
+      query:      z.string().min(1).max(500),
       sourceType: z.enum(['decision', 'task', 'feature', 'event', 'summary']).optional(),
-      limit: z.number().int().min(1).max(20).optional(),
+      limit:      z.number().int().min(1).max(20).optional(),
     },
   }, async ({ projectId, query, sourceType, limit }) => {
     try {
@@ -232,18 +361,21 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
     }
   });
 
-  // ─── Set Project Profile ───
+  // ─── Set Project Profile ──────────────────────────────────────────────────
   server.registerTool('orbitnest_set_project_profile', {
-    description:
-      'Update the project profile: summary, tech stack, conventions, or agent-written digest. ' +
-      'Call this at the END of each work session to write a brief digest of what was accomplished and what comes next. ' +
-      'This is the primary way the project memory is kept fresh for future sessions.',
+    description: [
+      'Update the project profile: summary, tech stack, conventions, and/or session digest.',
+      'Use orbitnest_sync_memory instead when you want to save a digest PLUS decisions/tasks/events in one call.',
+      'Use this tool directly when you only need to update the profile fields (summary, stack, conventions).',
+      '',
+      'Keywords: update profile, set summary, update stack, write digest, save memory, persist.',
+    ].join('\n'),
     inputSchema: {
-      projectId: z.string().uuid().optional(),
-      summary: z.string().max(1000).optional().describe('One-paragraph project overview'),
-      stack: z.array(z.string()).optional().describe('Tech stack (e.g. ["NestJS", "Next.js", "Postgres"])'),
-      conventions: z.record(z.unknown()).optional().describe('Key conventions object (e.g. { "auth": "JWT", "style": "snake_case" })'),
-      digest: z.string().max(3000).optional().describe('Agent-written end-of-session digest: what was done, decisions made, what comes next'),
+      projectId:   z.string().uuid().optional(),
+      summary:     z.string().max(1000).optional().describe('One-paragraph project overview'),
+      stack:       z.array(z.string()).optional().describe('Tech stack (e.g. ["NestJS", "Next.js", "Postgres"])'),
+      conventions: z.record(z.unknown()).optional().describe('Key conventions (e.g. { auth: "JWT", style: "snake_case" })'),
+      digest:      z.string().max(3000).optional().describe('Agent-written digest: what was done, decisions made, what comes next'),
     },
   }, async ({ projectId, summary, stack, conventions, digest }) => {
     try {
@@ -252,6 +384,7 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
       const result = await ctx.apiClient.setProjectProfile(pid, {
         summary, stack, conventions: conventions as Record<string, unknown> | undefined, digest,
       });
+      if (digest) tracker.markSynced();
       return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
     } catch (error) {
       return formatErrorResponse(error);
