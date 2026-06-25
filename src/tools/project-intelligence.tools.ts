@@ -4,6 +4,36 @@ import type { ToolContext } from './index.js';
 import { formatErrorResponse } from '../utils/errors.js';
 import { requireProjectId } from '../utils/validators.js';
 
+// ── Structured content schemas ────────────────────────────────────────────────
+// The AI sends STRUCTURED data (not a text blob). We serialize to JSON and store
+// it in the profile's text columns; the Studio UI renders each section cleanly
+// and the API flattens it to prose for embeddings.
+
+const sessionDigestSchema = z.object({
+  date:    z.string().max(40).optional().describe('Session date, ISO (e.g. "2026-06-24")'),
+  title:   z.string().min(1).max(120).describe('Short session title, e.g. "UI/UX + bugfix pass"'),
+  summary: z.string().max(600).optional().describe('1–2 sentence overview of the session'),
+  done: z.array(z.object({
+    title:  z.string().min(1).max(200).describe('What was accomplished, concise'),
+    detail: z.string().max(800).optional().describe('Supporting detail / how it was done'),
+  })).max(40).optional().describe('Completed work items this session'),
+  next:     z.array(z.string().max(400)).max(30).optional().describe('Next steps / follow-ups for the next session'),
+  blockers: z.array(z.string().max(400)).max(30).optional().describe('Open blockers, risks, or things to investigate'),
+});
+
+const projectSummarySchema = z.object({
+  tagline:     z.string().max(200).optional().describe('One-line description of the project'),
+  description: z.string().min(1).max(3000).describe('Paragraph describing what the project is and does'),
+  highlights:  z.array(z.string().max(400)).max(30).optional().describe('Key features / capabilities as bullet points'),
+});
+
+function encodeDigest(d: z.infer<typeof sessionDigestSchema>): string {
+  return JSON.stringify({ v: 1, kind: 'session_digest', ...d });
+}
+function encodeSummary(s: z.infer<typeof projectSummarySchema>): string {
+  return JSON.stringify({ v: 1, kind: 'project_summary', ...s });
+}
+
 export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolContext): void {
   const { tracker } = ctx;
 
@@ -55,10 +85,14 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
       'ONE-CALL SESSION-END MEMORY SYNC. Save everything to the project memory in a single call.',
       '',
       'Pass:',
-      '  • digest   — what was accomplished, decisions made, blockers, what comes next',
+      '  • digest    — STRUCTURED session summary (title + done[] + next[] + blockers[]). NOT a text blob.',
       '  • decisions — list of decisions made this session (if not already written via add_decision)',
       '  • tasks     — list of follow-up items (if not already written via add_task)',
       '  • events    — notable events: deploys, bugs, milestones (if not already written via add_event)',
+      '',
+      'The digest MUST be structured: break work into discrete `done` items (each with a title and optional',
+      'detail), list `next` steps as separate strings, and `blockers` as separate strings. Do NOT cram',
+      'everything into one paragraph — the UI renders each section separately for readability.',
       '',
       'All items are written in parallel. No need to call add_task / add_decision / add_event separately.',
       '',
@@ -69,8 +103,8 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
     ].join('\n'),
     inputSchema: {
       projectId: z.string().uuid().optional(),
-      digest: z.string().min(1).max(3000).describe(
-        'Session summary: what was accomplished, key decisions, blockers, and what should happen next session.',
+      digest: sessionDigestSchema.describe(
+        'STRUCTURED session digest: { title, summary?, done: [{title, detail?}], next: [...], blockers: [...] }. Break work into discrete items — do not write a single paragraph.',
       ),
       decisions: z.array(z.object({
         decision: z.string().min(1).max(500).describe('The decision, in one sentence'),
@@ -94,8 +128,8 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
 
       const writes: Promise<unknown>[] = [];
 
-      // Write profile/digest
-      writes.push(ctx.apiClient.setProjectProfile(pid, { digest }));
+      // Write profile/digest (serialized structured JSON)
+      writes.push(ctx.apiClient.setProjectProfile(pid, { digest: encodeDigest(digest) }));
 
       // Write decisions in parallel
       for (const d of decisions ?? []) {
@@ -366,23 +400,29 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
     description: [
       'Update the project profile: summary, tech stack, conventions, and/or session digest.',
       'Use orbitnest_sync_memory instead when you want to save a digest PLUS decisions/tasks/events in one call.',
-      'Use this tool directly when you only need to update the profile fields (summary, stack, conventions).',
+      'Use this tool directly to set the STRUCTURED project summary or update stack/conventions.',
+      '',
+      'The summary is STRUCTURED: { description, tagline?, highlights[] } — break key capabilities into',
+      'separate `highlights` rather than one long paragraph.',
       '',
       'Keywords: update profile, set summary, update stack, write digest, save memory, persist.',
     ].join('\n'),
     inputSchema: {
       projectId:   z.string().uuid().optional(),
-      summary:     z.string().max(1000).optional().describe('One-paragraph project overview'),
+      summary:     projectSummarySchema.optional().describe('STRUCTURED project summary: { description, tagline?, highlights: [...] }'),
       stack:       z.array(z.string()).optional().describe('Tech stack (e.g. ["NestJS", "Next.js", "Postgres"])'),
       conventions: z.record(z.unknown()).optional().describe('Key conventions (e.g. { auth: "JWT", style: "snake_case" })'),
-      digest:      z.string().max(3000).optional().describe('Agent-written digest: what was done, decisions made, what comes next'),
+      digest:      sessionDigestSchema.optional().describe('STRUCTURED session digest: { title, done: [...], next: [...], blockers: [...] }'),
     },
   }, async ({ projectId, summary, stack, conventions, digest }) => {
     try {
       await ctx.session.ensureAuthenticated();
       const pid = requireProjectId(projectId, ctx.session.getSession().currentProjectId);
       const result = await ctx.apiClient.setProjectProfile(pid, {
-        summary, stack, conventions: conventions as Record<string, unknown> | undefined, digest,
+        summary: summary ? encodeSummary(summary) : undefined,
+        stack,
+        conventions: conventions as Record<string, unknown> | undefined,
+        digest: digest ? encodeDigest(digest) : undefined,
       });
       if (digest) tracker.markSynced();
       return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
