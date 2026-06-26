@@ -10,6 +10,72 @@ import { SessionTracker } from './context/session-tracker.js';
 import { registerAllTools, type ToolContext } from './tools/index.js';
 import { logger } from './utils/logger.js';
 
+/**
+ * Build the COMPACT orientation summary served by the project://context
+ * resource. Emits only a name, a one-line description, item counts and a
+ * pointer to the full tool — never the full memory. Hard-capped at `maxChars`
+ * so it can never inflate the prompt (clients auto-read resources every turn).
+ */
+export function buildCompactSummary(
+  ctx: Record<string, unknown>,
+  projectName: string,
+  maxChars: number,
+): Record<string, unknown> {
+  const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
+  const profile = (ctx?.profile ?? null) as Record<string, unknown> | null;
+  const features = (ctx?.features ?? {}) as Record<string, unknown>;
+  const featureCount =
+    arr(features.planned).length + arr(features.in_progress).length + arr(features.released).length;
+
+  // One-line description from the stored summary (plain text or a JSON blob the
+  // AI wrote as { kind:'project_summary', tagline, description, ... }).
+  let description = '';
+  const rawSummary = profile?.summary;
+  if (typeof rawSummary === 'string' && rawSummary.trim()) {
+    const t = rawSummary.trim();
+    if (t.startsWith('{')) {
+      try {
+        const o = JSON.parse(t) as Record<string, unknown>;
+        description = String(o.tagline ?? o.description ?? '');
+      } catch {
+        description = t;
+      }
+    } else {
+      description = t;
+    }
+  }
+  description = description.replace(/\s+/g, ' ').slice(0, 280);
+
+  const note =
+    'Compact overview only — NOT full memory. Call the orbitnest_get_project_context tool for detail, or orbitnest_search_memory to find specific items.';
+
+  const summary: Record<string, unknown> = {
+    project: projectName,
+    ...(description ? { description } : {}),
+    ...(arr(profile?.stack).length ? { stack: arr(profile?.stack).slice(0, 12) } : {}),
+    counts: {
+      openTasks: arr(ctx?.openTasks).length,
+      activeDecisions: arr(ctx?.activeDecisions).length,
+      features: featureCount,
+      recentEvents: arr(ctx?.recentEvents).length,
+    },
+    ...(profile?.digest_at || profile?.updated_at
+      ? { lastUpdated: profile?.digest_at ?? profile?.updated_at }
+      : {}),
+    note,
+  };
+
+  // Hard cap. Shed the heavy optional fields, then fall back to counts + note.
+  if (JSON.stringify(summary).length > maxChars) {
+    delete summary.description;
+    delete summary.stack;
+    if (JSON.stringify(summary).length > maxChars) {
+      return { project: projectName, counts: summary.counts, note };
+    }
+  }
+  return summary;
+}
+
 export async function createServer(config: AppConfig): Promise<{ server: McpServer; tracker: SessionTracker; apiClient: OrbitNestClient }> {
   const apiClient = new OrbitNestClient({ apiUrl: config.apiUrl, accessToken: '' });
 
@@ -67,42 +133,50 @@ export async function createServer(config: AppConfig): Promise<{ server: McpServ
   );
 
   // ── Register project://context resource ─────────────────────────────────
-  // MCP clients that support resources can fetch this to get live context.
-  // Many clients auto-read resources and present them to the AI.
+  // Clients auto-read resources into the prompt on EVERY request, so this MUST
+  // stay tiny (target ≤4KB). It returns a COMPACT orientation summary only —
+  // project name, a one-line description, counts, and a pointer to the full
+  // tool. It must NEVER serialize the whole project memory (that overflowed the
+  // context window: a large project's full context was ~1.7M tokens). Full
+  // detail is pulled deliberately via the orbitnest_get_project_context tool;
+  // specific recall is done via orbitnest_search_memory (vector/FTS) so the AI
+  // skims, not reads everything.
+  const RESOURCE_MAX_CHARS = 4000;
   try {
     server.registerResource(
       'project-context',
       'project://context',
       {
-        title: 'Project Intelligence Context',
+        title: 'Project Intelligence — compact summary',
         description:
-          'Live OrbitNest project context: profile, tech stack, open tasks, active decisions, feature roadmap, and recent events. ' +
-          'Read this at session start to orient yourself. Updated in real time as the project evolves.',
+          'Compact orientation summary for the active OrbitNest project (name, one-line description, item counts). ' +
+          'NOT the full memory. Call the orbitnest_get_project_context tool for full detail, or orbitnest_search_memory to find specific items.',
         mimeType: 'application/json',
       },
       async () => {
+        const emit = (obj: unknown) => ({
+          contents: [{ uri: 'project://context', mimeType: 'application/json', text: JSON.stringify(obj) }],
+        });
         await sessionService.ensureAuthenticated();
-        const pid = sessionService.getSession().currentProjectId;
+        const session = sessionService.getSession();
+        const pid = session.currentProjectId;
         if (!pid) {
-          return {
-            contents: [{
-              uri: 'project://context',
-              mimeType: 'application/json',
-              text: JSON.stringify({ error: 'No active project. Call orbitnest_set_active_project first.' }),
-            }],
-          };
+          return emit({ error: 'No active project. Call orbitnest_set_active_project first.' });
         }
-        const ctx = await apiClient.getProjectContext(pid, { events: 20 });
-        return {
-          contents: [{
-            uri: 'project://context',
-            mimeType: 'application/json',
-            text: JSON.stringify(ctx, null, 2),
-          }],
-        };
+        try {
+          const ctx = await apiClient.getProjectContext(pid, { events: 20 });
+          const summary = buildCompactSummary(ctx, session.currentProjectSlug ?? pid, RESOURCE_MAX_CHARS);
+          return emit(summary);
+        } catch {
+          // Never fail the session over an orientation blurb.
+          return emit({
+            project: session.currentProjectSlug ?? pid,
+            note: 'Context summary unavailable. Call orbitnest_get_project_context for detail.',
+          });
+        }
       },
     );
-    logger.info('Registered MCP resource: project://context');
+    logger.info('Registered MCP resource: project://context (compact)');
   } catch (err) {
     logger.warn('Could not register project://context resource', { err: String(err) });
   }
