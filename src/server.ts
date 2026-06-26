@@ -32,79 +32,32 @@ export async function createServer(config: AppConfig): Promise<{ server: McpServ
     }
   }
 
-  // ── Try to pre-load the project context at server start ─────────────────
-  // This embeds a live snapshot directly into SESSION_INSTRUCTIONS so the AI
-  // has it without needing to call any tool first. Fails silently if auth is
-  // stale or no project is active yet.
-  let contextSnapshot = '';
+  // ── Register the active project with the tracker ────────────────────────
+  // The workspace marker (.orbitnest/config.json) tells us WHICH project this
+  // is; that's the auto-hook. We deliberately do NOT pull the project context
+  // here. Embedding a live snapshot into the server instructions inflates the
+  // system prompt on every single request — a large stored digest then blows
+  // past the model's context limit. Context is pulled on demand instead, once,
+  // via orbitnest_get_project_context.
   const activeProjectId = sessionService.getSession().currentProjectId;
-  if (sessionService.isAuthenticated() && activeProjectId) {
-    tracker.setProject(activeProjectId);
-    try {
-      const ctx = await apiClient.getProjectContext(activeProjectId, { events: 15 });
-      contextSnapshot = [
-        '',
-        '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
-        `PROJECT CONTEXT — auto-loaded at server start (${new Date().toISOString()})`,
-        '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
-        JSON.stringify(ctx, null, 2),
-        '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
-        'You already have this context. Do NOT call orbitnest_get_project_context again unless you need a refresh.',
-      ].join('\n');
-      logger.info('Project context pre-loaded into session instructions', { projectId: activeProjectId });
-    } catch (err) {
-      contextSnapshot = '\n[Context auto-load failed — call orbitnest_get_project_context to load manually.]';
-      logger.warn('Could not pre-load project context', { err: String(err) });
-    }
-  }
+  if (activeProjectId) tracker.setProject(activeProjectId);
 
   // ── SESSION_INSTRUCTIONS ─────────────────────────────────────────────────
-  // These are surfaced by MCP clients as the server's system instructions.
-  // Strong, imperative language — not suggestions.
+  // Surfaced by MCP clients as the server's system instructions — they ride
+  // along on every request, so keep them SMALL. Pointers to tools, no data.
   const SESSION_INSTRUCTIONS = [
-    'You are an AI assistant with PERSISTENT MEMORY for OrbitNest projects via the Project Intelligence system.',
+    'Persistent memory for OrbitNest projects (Project Intelligence). Pull context on demand; never assume it is already loaded.',
     '',
-    '╔══════════════════════════════════════════════════════════════╗',
-    '║              SESSION LIFECYCLE — REQUIRED STEPS             ║',
-    '╚══════════════════════════════════════════════════════════════╝',
+    'SESSION START: if no project is set, call orbitnest_list_projects then orbitnest_set_active_project.',
+    'Then call orbitnest_get_project_context ONCE to load this project\'s memory (profile, open tasks, decisions, recent events). Do not call it again unless you need a refresh.',
     '',
-    '─── SESSION START (do this automatically, without waiting for the user) ───',
-    '1. If no project is set: call orbitnest_list_projects → orbitnest_set_active_project.',
-    '2. The current project context may already be embedded below (check for PROJECT CONTEXT section).',
-    '   If it is: you have what you need. If not: call orbitnest_get_project_context NOW.',
-    '3. Read open tasks, the digest, and active decisions before doing anything else.',
+    'DURING THE SESSION, write as things happen (not batched at the end):',
+    '  orbitnest_add_decision — an architectural/product decision',
+    '  orbitnest_add_task     — a follow-up / TODO',
+    '  orbitnest_add_event    — a deploy / bug / milestone',
+    '  orbitnest_search_memory — recall anything not in the loaded context',
     '',
-    '─── DURING THE SESSION (call these as things happen, not at the end) ───',
-    '• Made a significant technical/product decision?',
-    '  → Call orbitnest_add_decision immediately, not at the end.',
-    '• Identified a follow-up item or TODO?',
-    '  → Call orbitnest_add_task immediately.',
-    '• Completed a deploy, found a bug, hit a milestone?',
-    '  → Call orbitnest_add_event immediately.',
-    '• Need to recall something not in the snapshot?',
-    '  → Call orbitnest_search_memory (semantic search over all project memory).',
-    '',
-    '─── SESSION END (REQUIRED — do this before the conversation ends) ───',
-    '• Call orbitnest_sync_memory with:',
-    '  - digest: what was done, decisions made, blockers, what comes next',
-    '  - Any decisions/tasks/events you haven\'t written yet',
-    '  This is a SINGLE CALL that saves everything. Do not skip it.',
-    '  If you\'re unsure whether the session is ending, write the digest anyway — it can be updated.',
-    '',
-    '╔══════════════════════════════════════════════════════════════╗',
-    '║                    MEMORY TOOL QUICK-REF                    ║',
-    '╚══════════════════════════════════════════════════════════════╝',
-    '  orbitnest_get_project_context  → load / refresh full project memory',
-    '  orbitnest_sync_memory          → ONE CALL: save digest + decisions + tasks + events',
-    '  orbitnest_add_decision         → record an architectural/product decision',
-    '  orbitnest_add_task             → record a follow-up task',
-    '  orbitnest_add_event            → record a deploy / bug / milestone',
-    '  orbitnest_search_memory        → semantic search over all stored memory',
-    '  orbitnest_set_project_profile  → update summary / stack / conventions',
-    '',
-    '⚠  Memory is ONLY written when you call a tool. It does NOT save automatically.',
-    '⚠  The session-end sync is the only guarantee that your work survives the next session.',
-    contextSnapshot,
+    'SESSION END: call orbitnest_sync_memory once with a digest (what was done, decisions, blockers, what\'s next) plus any unsaved decisions/tasks/events. Keep the digest concise — a summary, not a transcript or file dumps. Memory is only persisted when you call a tool.',
   ].join('\n');
 
   // ── Create MCP server ────────────────────────────────────────────────────
@@ -171,7 +124,6 @@ export async function createServer(config: AppConfig): Promise<{ server: McpServ
     tools: 'all registered',
     authenticated: String(sessionService.isAuthenticated()),
     activeProject: sessionService.getSession().currentProjectId ?? 'none',
-    contextPreloaded: Boolean(activeProjectId && !contextSnapshot.includes('failed')),
   });
 
   return { server, tracker, apiClient };
