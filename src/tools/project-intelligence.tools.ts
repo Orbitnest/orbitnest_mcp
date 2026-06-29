@@ -41,30 +41,34 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
   // Keywords: load memory, load context, sync memory, project state, orientation
   server.registerTool('orbitnest_get_project_context', {
     description: [
-      'Load (or refresh) the full project memory and context.',
-      'Returns: project profile, tech stack, conventions, agent digest, open tasks, active decisions, feature roadmap, and recent events.',
+      'Load (or refresh) the project memory and context.',
+      'Returns: project summary, tech stack, agent digest, open tasks, active decisions, in-progress/planned features, and recent events.',
       '',
-      'WHEN TO CALL: Automatically at session start — before taking any action on the project.',
-      'If a PROJECT CONTEXT block is already present in your instructions, it was pre-loaded at server start; call this only to refresh it.',
+      'By default this returns a TRIMMED, token-budgeted view (long text truncated, released features and raw event metadata omitted) so it never bloats your context. Pass detail=true for a fuller payload (longer text, released features, more events), or use orbitnest_search_memory to pull specific items in full.',
       '',
-      'Keywords: load memory, load context, refresh context, sync memory, project state, orient, catch up, what is the project, what was done.',
+      'WHEN TO CALL: Once at session start — before taking any action on the project. Do not re-call unless you need a refresh.',
+      '',
+      'Keywords: load memory, load context, refresh context, project state, orient, catch up, what is the project, what was done.',
     ].join('\n'),
     inputSchema: {
       projectId: z.string().uuid().optional().describe('Project ID (uses active project if omitted)'),
+      detail: z.boolean().optional().describe('Return a fuller payload (longer text, released features, more events). Default false = lean.'),
       includeSchema: z.boolean().optional().describe('Also return the DB schema alongside the context'),
-      eventLimit: z.number().int().min(1).max(50).optional().describe('How many recent events to include (default 20)'),
+      eventLimit: z.number().int().min(1).max(50).optional().describe('How many recent events to include'),
     },
-  }, async ({ projectId, includeSchema, eventLimit }) => {
+  }, async ({ projectId, detail, includeSchema, eventLimit }) => {
     try {
       await ctx.session.ensureAuthenticated();
       const pid = requireProjectId(projectId, ctx.session.getSession().currentProjectId);
       tracker.setProject(pid);
-      const result = await ctx.apiClient.getProjectContext(pid, { includeSchema, events: eventLimit });
+      const result = await ctx.apiClient.getProjectContext(pid, {
+        view: 'ai', detail, includeSchema, events: eventLimit,
+      });
       return {
         content: [{
           type: 'text' as const,
           text: [
-            JSON.stringify(result, null, 2),
+            JSON.stringify(result),
             '',
             '─── NEXT STEPS ───',
             '• Review open tasks and the latest digest.',
@@ -184,7 +188,7 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
       await ctx.session.ensureAuthenticated();
       const pid = requireProjectId(projectId, ctx.session.getSession().currentProjectId);
       const result = await ctx.apiClient.getRecentChanges(pid, { since, limit });
-      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
     } catch (error) {
       return formatErrorResponse(error);
     }
@@ -202,7 +206,7 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
       await ctx.session.ensureAuthenticated();
       const pid = requireProjectId(projectId, ctx.session.getSession().currentProjectId);
       const result = await ctx.apiClient.getOpenTasks(pid, { priority });
-      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
     } catch (error) {
       return formatErrorResponse(error);
     }
@@ -229,7 +233,7 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
       const result = await ctx.apiClient.addTask(pid, { title, detail, priority, linkedFeatureId });
       tracker.record({ kind: 'task', summary: title });
       const footer = tracker.reminderFooter() ?? '';
-      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) + footer }] };
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result) + footer }] };
     } catch (error) {
       return formatErrorResponse(error);
     }
@@ -249,7 +253,7 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
       const pid = requireProjectId(projectId, ctx.session.getSession().currentProjectId);
       const result = await ctx.apiClient.completeTask(pid, taskId, { note });
       tracker.record({ kind: 'complete', summary: `task ${taskId}` });
-      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
     } catch (error) {
       return formatErrorResponse(error);
     }
@@ -270,7 +274,7 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
       await ctx.session.ensureAuthenticated();
       const pid = requireProjectId(projectId, ctx.session.getSession().currentProjectId);
       const result = await ctx.apiClient.getProjectDecisions(pid, { status, limit });
-      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
     } catch (error) {
       return formatErrorResponse(error);
     }
@@ -296,7 +300,7 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
       const result = await ctx.apiClient.addDecision(pid, { decision, reason, metadata: metadata as Record<string, unknown> | undefined });
       tracker.record({ kind: 'decision', summary: decision });
       const footer = tracker.reminderFooter() ?? '';
-      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) + footer }] };
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result) + footer }] };
     } catch (error) {
       return formatErrorResponse(error);
     }
@@ -319,7 +323,7 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
       tracker.setProject(pid);
       const result = await ctx.apiClient.addFeature(pid, { name, description, status, dependencies });
       tracker.record({ kind: 'task', summary: `[feature] ${name}` });
-      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
     } catch (error) {
       return formatErrorResponse(error);
     }
@@ -339,7 +343,7 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
       await ctx.session.ensureAuthenticated();
       const pid = requireProjectId(projectId, ctx.session.getSession().currentProjectId);
       const result = await ctx.apiClient.updateFeature(pid, featureId, { status, description });
-      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
     } catch (error) {
       return formatErrorResponse(error);
     }
@@ -366,7 +370,7 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
       const result = await ctx.apiClient.addEvent(pid, { type, summary, metadata: metadata as Record<string, unknown> | undefined });
       tracker.record({ kind: 'event', summary: `[${type}] ${summary}` });
       const footer = tracker.reminderFooter() ?? '';
-      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) + footer }] };
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result) + footer }] };
     } catch (error) {
       return formatErrorResponse(error);
     }
@@ -389,7 +393,7 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
       await ctx.session.ensureAuthenticated();
       const pid = requireProjectId(projectId, ctx.session.getSession().currentProjectId);
       const result = await ctx.apiClient.searchProjectMemory(pid, { query, sourceType, limit });
-      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
     } catch (error) {
       return formatErrorResponse(error);
     }
@@ -425,7 +429,7 @@ export function registerProjectIntelligenceTools(server: McpServer, ctx: ToolCon
         digest: digest ? encodeDigest(digest) : undefined,
       });
       if (digest) tracker.markSynced();
-      return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
+      return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
     } catch (error) {
       return formatErrorResponse(error);
     }

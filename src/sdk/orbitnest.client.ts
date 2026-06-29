@@ -838,11 +838,16 @@ export class OrbitNestClient {
 
   // ── Project Intelligence ──────────────────────────────────────────────────
 
-  async getProjectContext(projectId: string, opts?: { includeSchema?: boolean; events?: number; tasks?: number }) {
+  async getProjectContext(
+    projectId: string,
+    opts?: { includeSchema?: boolean; events?: number; tasks?: number; view?: 'full' | 'ai'; detail?: boolean },
+  ) {
     const query: Record<string, string> = {};
     if (opts?.includeSchema) query['includeSchema'] = 'true';
     if (opts?.events) query['events'] = String(opts.events);
     if (opts?.tasks) query['tasks'] = String(opts.tasks);
+    if (opts?.view) query['view'] = opts.view;
+    if (opts?.detail) query['detail'] = 'true';
     return this.request<Record<string, unknown>>('GET', EP.INTELLIGENCE.CONTEXT(projectId), undefined, { query });
   }
 
